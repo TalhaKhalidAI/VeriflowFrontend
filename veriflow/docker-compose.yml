@@ -1,0 +1,24 @@
+services:
+  veriflow-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: veriflow-web
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    volumes:
+      - ./:/app
+      - ./dist:/usr/share/nginx/html
+    dns:
+      - 192.168.100.33
+      - 8.8.8.8
+    networks:
+      a-class-bridge:
+        ipv4_address: 10.0.0.11
+
+networks:
+  a-class-bridge:
+    external: true
+    name: a-class-bridge
+
