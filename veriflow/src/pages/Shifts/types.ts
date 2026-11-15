@@ -11,6 +11,10 @@ export interface ShiftRecord {
   created_by?: number | null;
   user_name?: string | null;
   user_email?: string | null;
+  created_by_name?: string | null;
+  created_by_email?: string | null;
+  key_name?: string | null;
+  key_kid?: string | null;
 }
 
 export interface ShiftListResponse {
@@ -61,4 +65,16 @@ export interface DeleteShiftResponse {
   message: string;
   shift: ShiftRecord;
   removed_scans: number;
+}
+
+
+export interface UpdateShiftPayload {
+  user_id?: number;
+  key_id?: string;
+  device_id?: string | null;
+  duration_value?: number;
+  duration_unit?: ShiftDurationUnit;
+  expires_at?: string;
+  status?: string;
+  revoked_reason?: string | null;
 }

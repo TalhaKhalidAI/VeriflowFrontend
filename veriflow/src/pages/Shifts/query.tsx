@@ -8,6 +8,7 @@ import type {
   StartShiftResponse,
   ReissueShiftResponse,
   DeleteShiftResponse,
+  UpdateShiftPayload,
 } from './types';
 
 export const useActiveShiftQuery = () => {
@@ -140,7 +141,40 @@ export const useDeleteShiftMutation = () => {
       queryClient.invalidateQueries({ queryKey: ['scans'] });
     },
     onError: (err: any) => {
-      ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to delete shift');
+      ToastMsgs.error(err?.message || 'Failed to delete shift');
+    },
+  });
+};
+
+
+export const useUpdateShiftMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ shiftId, payload }: { shiftId: string; payload: UpdateShiftPayload }) => {
+      return await http.put<ShiftRecord>(`/shifts/${shiftId}`, payload);
+    },
+    onSuccess: (res) => {
+      ToastMsgs.success(`Shift ${res.id.slice(0, 8)} updated successfully!`);
+      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+    },
+    onError: (err: any) => {
+      ToastMsgs.error(err?.message || 'Failed to update shift');
+    },
+  });
+};
+
+export const useRestartShiftMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ shiftId, includeRules = true }: { shiftId: string; includeRules?: boolean }) => {
+      return await http.post<StartShiftResponse>(`/shifts/${shiftId}/restart?include_rules=${includeRules}`);
+    },
+    onSuccess: () => {
+      ToastMsgs.success('Shift restarted with same configuration!');
+      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+    },
+    onError: (err: any) => {
+      ToastMsgs.error(err?.message || 'Failed to restart shift');
     },
   });
 };

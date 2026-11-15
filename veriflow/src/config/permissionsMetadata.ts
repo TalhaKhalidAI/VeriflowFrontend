@@ -55,6 +55,8 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
   "shifts.view.all": { label: "View All Shift History", description: "Comprehensive shift auditing access" },
   "shifts.view.own": { label: "View Own Shift Logs", description: "View own shifts and session RS256 tokens" },
   "shifts.create": { label: "Start Active Work Shift", description: "Initialize shift and generate RS256 token" },
+  "shifts.update": { label: "Update Own Shift", description: "Modify own shift device, signing key, or duration" },
+  "shifts.update.any": { label: "Update Any Operator Shift", description: "Update or reassign any user work shift", badge: "ADMIN SCOPE", color: "#F59E0B" },
   "shifts.revoke": { label: "Terminate Active Shift", description: "Revoke and end an ongoing shift" },
   "shifts.checkout": { label: "Complete Shift Checkout", description: "Sign out and finalize shift metrics" },
   "shifts.delete": { label: "Delete Own Shifts", description: "Permanently delete work shifts personally started by this user (cannot delete admin-created shifts)", badge: "OWN SHIFTS", color: "#38BDF8" },

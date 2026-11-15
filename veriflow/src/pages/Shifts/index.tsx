@@ -38,6 +38,9 @@ import {
   AccessTimeFilledRounded as ShiftIcon,
   DownloadRounded as DownloadIcon,
   DeleteRounded as DeleteIcon,
+  VisibilityRounded as EyeIcon,
+  EditRounded as EditIcon,
+  ReplayRounded as RestartIcon,
 } from '@mui/icons-material';
 import QRCode from 'qrcode';
 import {
@@ -47,8 +50,16 @@ import {
   useReissueActiveShiftMutation,
   useCheckoutShiftMutation,
   useDeleteShiftMutation,
+  useUpdateShiftMutation,
+  useRestartShiftMutation,
 } from './query';
-import type { StartShiftResponse, ReissueShiftResponse, ShiftRecord, ShiftDurationUnit } from './types';
+import type {
+  StartShiftResponse,
+  ReissueShiftResponse,
+  ShiftRecord,
+  ShiftDurationUnit,
+  UpdateShiftPayload,
+} from './types';
 import { Table, type TableColumn, type TableAction } from '../../components/Table';
 import { useKeysQuery } from '../Keys/query';
 import { useAdminUsersQuery } from '../Admin/query';
@@ -65,6 +76,13 @@ export function ShiftsPage() {
   const canViewSelf = canViewAny || Boolean(user?.permissions?.['shifts.view']) || Boolean(user?.permissions?.['shifts.view.own']) || canDeleteOwnShift;
   const canCreateShift = isAdmin || Boolean(user?.permissions?.['shifts.create']);
   const canCheckoutShift = isAdmin || Boolean(user?.permissions?.['shifts.checkout']);
+  const canUpdateAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.update.any']);
+
+  const canUpdateShiftRecord = (s?: ShiftRecord | null) =>
+    Boolean(s && (canUpdateAnyShift || Number(s.user_id) === currentUserId));
+
+  const canRestartShiftRecord = (s?: ShiftRecord | null) =>
+    Boolean(s && canCreateShift && (canUpdateAnyShift || canViewAny || Number(s.user_id) === currentUserId));
 
   const isShiftSelfCreated = (s?: ShiftRecord | null) =>
     Boolean(s && Number(s.user_id) === currentUserId && s.created_by != null && Number(s.created_by) === currentUserId);
@@ -75,7 +93,7 @@ export function ShiftsPage() {
   const { data: activeShift, isLoading: isLoadingActive } = useActiveShiftQuery();
   const { data: shiftsData, isLoading: isLoadingShifts } = useShiftsQuery();
   const { data: keysData } = useKeysQuery('active');
-  const { data: usersData = [] } = useAdminUsersQuery({ show_permissions: false, enabled: isAdmin });
+  const { data: usersData = [] } = useAdminUsersQuery({ show_permissions: false, enabled: isAdmin || canViewAny || canUpdateAnyShift });
   const keys = keysData?.items || [];
 
   const userOptions = useMemo(() => {
@@ -131,8 +149,23 @@ export function ShiftsPage() {
   const reissueMutation = useReissueActiveShiftMutation();
   const checkoutMutation = useCheckoutShiftMutation();
   const deleteShiftMutation = useDeleteShiftMutation();
+  const updateShiftMutation = useUpdateShiftMutation();
+  const restartShiftMutation = useRestartShiftMutation();
 
   // Modals state
+  const [infoModalOpen, setInfoModalOpen] = useState(false);
+  const [selectedShiftInfo, setSelectedShiftInfo] = useState<ShiftRecord | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [shiftToUpdate, setShiftToUpdate] = useState<ShiftRecord | null>(null);
+  const [updateForm, setUpdateForm] = useState({
+    user_id: '',
+    key_id: '',
+    device_id: '',
+    duration_value: '',
+    duration_unit: 'hours' as ShiftDurationUnit,
+    status: '',
+    revoked_reason: '',
+  });
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [reissueModalOpen, setReissueModalOpen] = useState(false);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
@@ -299,6 +332,78 @@ export function ShiftsPage() {
     await checkoutMutation.mutateAsync(shiftId);
   };
 
+  const handleOpenShiftInfo = (shift: ShiftRecord) => {
+    setSelectedShiftInfo(shift);
+    setInfoModalOpen(true);
+  };
+
+  const handleOpenUpdateShift = (shift: ShiftRecord) => {
+    setShiftToUpdate(shift);
+    setUpdateForm({
+      user_id: String(shift.user_id),
+      key_id: shift.key_id || '',
+      device_id: shift.device_id || '',
+      duration_value: '',
+      duration_unit: 'hours',
+      status: shift.status || 'active',
+      revoked_reason: shift.revoked_reason || '',
+    });
+    setUpdateModalOpen(true);
+  };
+
+  const handleConfirmUpdateShift = async () => {
+    if (!shiftToUpdate) return;
+    const payload: UpdateShiftPayload = {};
+
+    if (updateForm.user_id && Number(updateForm.user_id) !== Number(shiftToUpdate.user_id)) {
+      payload.user_id = Number(updateForm.user_id);
+    }
+    if (updateForm.key_id && updateForm.key_id !== shiftToUpdate.key_id) {
+      payload.key_id = updateForm.key_id;
+    }
+    if (updateForm.device_id !== (shiftToUpdate.device_id || '')) {
+      payload.device_id = updateForm.device_id.trim() || null;
+    }
+    if (updateForm.duration_value.trim() !== '') {
+      const dur = Number(updateForm.duration_value);
+      if (!Number.isFinite(dur) || dur < 1) {
+        ToastMsgs.error('Duration must be at least 1');
+        return;
+      }
+      payload.duration_value = Math.floor(dur);
+      payload.duration_unit = updateForm.duration_unit;
+    }
+    if (canUpdateAnyShift && updateForm.status && updateForm.status !== shiftToUpdate.status) {
+      payload.status = updateForm.status;
+    }
+    if (updateForm.revoked_reason !== (shiftToUpdate.revoked_reason || '')) {
+      payload.revoked_reason = updateForm.revoked_reason.trim() || null;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      ToastMsgs.info('No fields changed.');
+      setUpdateModalOpen(false);
+      return;
+    }
+
+    await updateShiftMutation.mutateAsync({ shiftId: shiftToUpdate.id, payload });
+    setUpdateModalOpen(false);
+    setShiftToUpdate(null);
+  };
+
+  const handleRestartShift = async (shift: ShiftRecord) => {
+    const res: any = await restartShiftMutation.mutateAsync({ shiftId: shift.id, includeRules: true });
+    setResultMode({ qr_only: false, include_rules: true });
+    setTokenResult(res);
+    setTokenModalTab(0);
+    if (res?.shift_token) {
+      await generateQRCode(res.shift_token);
+    } else {
+      setQrCodeDataUrl(null);
+    }
+    setTokenModalOpen(true);
+  };
+
   const handleOpenDeleteShift = (shift?: ShiftRecord | null) => {
     setSelectedShiftToDelete(shift || null);
     setShiftIdToDelete(shift?.id || '');
@@ -408,6 +513,77 @@ export function ShiftsPage() {
   ];
 
   const shiftActions: TableAction<ShiftRecord>[] = [
+    {
+      label: 'View Info',
+      variant: 'info' as const,
+      onClick: (s: ShiftRecord) => handleOpenShiftInfo(s),
+      render: (s: ShiftRecord) => (
+        <Button
+          size="small"
+          variant="outlined"
+          color="info"
+          startIcon={<EyeIcon sx={{ fontSize: 15 }} />}
+          onClick={() => handleOpenShiftInfo(s)}
+          title="View shift details"
+          sx={{ py: 0.25, px: 1, fontSize: 11, minWidth: 'auto' }}
+        >
+          Info
+        </Button>
+      ),
+    },
+    {
+      label: 'Update',
+      variant: 'primary' as const,
+      disabled: (s: ShiftRecord) => !canUpdateShiftRecord(s),
+      onClick: (s: ShiftRecord) => handleOpenUpdateShift(s),
+      render: (s: ShiftRecord) => {
+        const allowed = canUpdateShiftRecord(s);
+        return (
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            startIcon={<EditIcon sx={{ fontSize: 14 }} />}
+            disabled={!allowed}
+            onClick={() => handleOpenUpdateShift(s)}
+            title={allowed ? 'Update shift fields (PUT)' : "Only own shifts can be updated without 'shifts.update.any'"}
+            sx={{ py: 0.25, px: 1, fontSize: 11 }}
+          >
+            {allowed ? 'Update' : 'Update 🔒'}
+          </Button>
+        );
+      },
+    },
+    {
+      label: 'Restart',
+      variant: 'success' as const,
+      disabled: (s: ShiftRecord) => s.status === 'active' || !canRestartShiftRecord(s) || restartShiftMutation.isPending,
+      onClick: (s: ShiftRecord) => handleRestartShift(s),
+      render: (s: ShiftRecord) => {
+        const isActive = s.status === 'active';
+        const allowed = canRestartShiftRecord(s);
+        return (
+          <Button
+            size="small"
+            variant="outlined"
+            color="success"
+            startIcon={<RestartIcon sx={{ fontSize: 14 }} />}
+            disabled={isActive || !allowed || restartShiftMutation.isPending}
+            onClick={() => handleRestartShift(s)}
+            title={
+              isActive
+                ? 'Shift is already active'
+                : allowed
+                ? 'Restart same shift configuration'
+                : 'Insufficient permission to restart this shift'
+            }
+            sx={{ py: 0.25, px: 1, fontSize: 11 }}
+          >
+            Restart
+          </Button>
+        );
+      },
+    },
     ...(canCheckoutShift
       ? [
         {
@@ -1504,6 +1680,265 @@ export function ShiftsPage() {
             disabled={deleteShiftMutation.isPending || !(selectedShiftToDelete?.id || shiftIdToDelete.trim())}
           >
             {deleteShiftMutation.isPending ? <CircularProgress size={20} /> : 'Permanently Delete Shift'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* View Shift Info Modal (Eye Icon) */}
+      <Dialog
+        open={infoModalOpen}
+        onClose={() => setInfoModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ color: '#F8FAFC', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <EyeIcon sx={{ color: '#38BDF8' }} /> Shift Details
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: '#1E293B' }}>
+          {selectedShiftInfo && (
+            <Stack spacing={1.5}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Shift ID</Typography>
+                <Typography variant="body2" sx={{ color: '#F8FAFC', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {selectedShiftInfo.id}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Status</Typography>
+                <Chip
+                  size="small"
+                  label={selectedShiftInfo.status.toUpperCase()}
+                  color={selectedShiftInfo.status === 'active' ? 'success' : selectedShiftInfo.status === 'revoked' ? 'error' : 'default'}
+                  sx={{ fontWeight: 700, fontSize: 11 }}
+                />
+              </Box>
+
+              {/* Owner Details */}
+              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'rgba(15, 23, 42, 0.7)', border: '1px solid #1E293B' }}>
+                <Typography variant="caption" sx={{ color: '#38BDF8', fontWeight: 700, display: 'block', mb: 0.5 }}>
+                  Shift Owner
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#F8FAFC', fontWeight: 600 }}>
+                  {selectedShiftInfo.user_name || getUserLabel(selectedShiftInfo.user_id)}
+                </Typography>
+                {selectedShiftInfo.user_email && (
+                  <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block' }}>
+                    {selectedShiftInfo.user_email} • User ID #{selectedShiftInfo.user_id}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Admin / Privileged Only: Who Made the Shift */}
+              {(isAdmin || canViewAny) && (
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                  <Typography variant="caption" sx={{ color: '#F59E0B', fontWeight: 700, display: 'block', mb: 0.5 }}>
+                    Created By (Admin Audit)
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#F8FAFC', fontWeight: 600 }}>
+                    {selectedShiftInfo.created_by != null
+                      ? `${selectedShiftInfo.created_by_name || getUserLabel(selectedShiftInfo.created_by)}${
+                          Number(selectedShiftInfo.created_by) === Number(selectedShiftInfo.user_id)
+                            ? ' (Self-Started)'
+                            : ' (Admin / Supervisor Started)'
+                        }`
+                      : 'System / Unknown'}
+                  </Typography>
+                  {selectedShiftInfo.created_by_email && (
+                    <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block' }}>
+                      {selectedShiftInfo.created_by_email} • Creator ID #{selectedShiftInfo.created_by}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Signing Key</Typography>
+                <Typography variant="body2" sx={{ color: '#F8FAFC', fontFamily: 'monospace' }}>
+                  {selectedShiftInfo.key_name
+                    ? `${selectedShiftInfo.key_name} (kid: ${selectedShiftInfo.key_kid || 'N/A'})`
+                    : getKeyLabel(selectedShiftInfo.key_id)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Device ID</Typography>
+                <Typography variant="body2" sx={{ color: '#F8FAFC', fontFamily: 'monospace' }}>
+                  {selectedShiftInfo.device_id || 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Started At</Typography>
+                <Typography variant="body2" sx={{ color: '#CBD5E1' }}>
+                  {selectedShiftInfo.started_at ? new Date(selectedShiftInfo.started_at).toLocaleString() : 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Expires At</Typography>
+                <Typography variant="body2" sx={{ color: '#FACC15' }}>
+                  {selectedShiftInfo.expires_at ? new Date(selectedShiftInfo.expires_at).toLocaleString() : 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8' }}>Ended At</Typography>
+                <Typography variant="body2" sx={{ color: '#CBD5E1' }}>
+                  {selectedShiftInfo.ended_at ? new Date(selectedShiftInfo.ended_at).toLocaleString() : 'In Progress / Not Checked Out'}
+                </Typography>
+              </Box>
+              {selectedShiftInfo.revoked_reason && (
+                <Alert severity="warning" sx={{ bgcolor: 'rgba(239, 68, 68, 0.1)', color: '#FCA5A5' }}>
+                  Note / Revocation Reason: {selectedShiftInfo.revoked_reason}
+                </Alert>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>
+          <Button onClick={() => setInfoModalOpen(false)} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Update Shift Modal (PUT - partial update, leaves untouched fields unchanged) */}
+      <Dialog
+        open={updateModalOpen}
+        onClose={() => setUpdateModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ color: '#F8FAFC', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <EditIcon sx={{ color: '#38BDF8' }} /> Update Shift (PUT)
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: '#1E293B', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+            Only modified fields are sent to the server; any field left unchanged will remain as-is.
+          </Typography>
+
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Assigned User"
+            value={updateForm.user_id}
+            onChange={(e) => setUpdateForm({ ...updateForm, user_id: e.target.value })}
+            helperText={
+              canUpdateAnyShift
+                ? 'Admin / shifts.update.any: you can reassign this shift to any user'
+                : 'Normal user: only your own user is enabled; other users are disabled'
+            }
+          >
+            {(() => {
+              const options = [...userOptions];
+              if (shiftToUpdate && !options.some((u) => u.id === Number(shiftToUpdate.user_id))) {
+                options.push({
+                  id: Number(shiftToUpdate.user_id),
+                  name: shiftToUpdate.user_name || `User #${shiftToUpdate.user_id}`,
+                  email: shiftToUpdate.user_email || '',
+                  role: 'user',
+                });
+              }
+              return options.map((u) => {
+                const isAllowedUser = canUpdateAnyShift || u.id === currentUserId;
+                return (
+                  <MenuItem key={u.id} value={String(u.id)} disabled={!isAllowedUser}>
+                    👤 {u.name} {u.email ? `(${u.email})` : ''} — ID #{u.id}
+                    {!isAllowedUser ? ' 🔒 (Not Allowed)' : u.id === currentUserId ? ' • (You)' : ''}
+                  </MenuItem>
+                );
+              });
+            })()}
+          </TextField>
+
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Signing Key (key_id)"
+            value={updateForm.key_id}
+            onChange={(e) => setUpdateForm({ ...updateForm, key_id: e.target.value })}
+          >
+            {keys
+              .filter((k) => k.status === 'active' || k.id === shiftToUpdate?.key_id)
+              .map((k) => (
+                <MenuItem key={k.id} value={k.id}>
+                  🔑 {k.name} (kid: {k.kid})
+                </MenuItem>
+              ))}
+          </TextField>
+
+          <TextField
+            fullWidth
+            size="small"
+            label="Device ID"
+            value={updateForm.device_id}
+            onChange={(e) => setUpdateForm({ ...updateForm, device_id: e.target.value })}
+            placeholder="Leave unchanged or enter new device ID"
+          />
+
+          <Stack direction="row" spacing={1.5}>
+            <TextField
+              fullWidth
+              size="small"
+              type="number"
+              label="New Duration (Optional)"
+              value={updateForm.duration_value}
+              onChange={(e) => setUpdateForm({ ...updateForm, duration_value: e.target.value })}
+              placeholder="Leave blank to keep expiry"
+              inputProps={{ min: 1 }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Unit"
+              value={updateForm.duration_unit}
+              onChange={(e) => setUpdateForm({ ...updateForm, duration_unit: e.target.value as ShiftDurationUnit })}
+              sx={{ minWidth: 130 }}
+            >
+              {(['seconds', 'minutes', 'hours', 'days', 'weeks'] as ShiftDurationUnit[]).map((u) => (
+                <MenuItem key={u} value={u}>
+                  {u}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Status"
+            value={updateForm.status}
+            onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}
+            disabled={!canUpdateAnyShift}
+            helperText={!canUpdateAnyShift ? 'Only Admin or shifts.update.any can change status directly' : undefined}
+          >
+            {['active', 'completed', 'revoked', 'expired'].map((st) => (
+              <MenuItem key={st} value={st}>
+                {st.toUpperCase()}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            fullWidth
+            size="small"
+            label="Note / Revoked Reason (Optional)"
+            value={updateForm.revoked_reason}
+            onChange={(e) => setUpdateForm({ ...updateForm, revoked_reason: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>
+          <Button onClick={() => setUpdateModalOpen(false)} sx={{ color: '#94A3B8' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<EditIcon />}
+            onClick={handleConfirmUpdateShift}
+            disabled={updateShiftMutation.isPending}
+          >
+            {updateShiftMutation.isPending ? <CircularProgress size={20} /> : 'Save Shift Updates'}
           </Button>
         </DialogActions>
       </Dialog>

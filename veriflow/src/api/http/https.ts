@@ -143,17 +143,17 @@ axiosInstance.interceptors.response.use(
     const status = error.response?.status
     const data = error.response?.data
 
-    if (status === 502 || status === 503 || status === 504) {
-      useAppStore.getState().setApiOffline(true, `Backend service temporarily unavailable (HTTP ${status}). Server may be restarting.`);
-    } else if (status && status < 500 && useAppStore.getState().isApiOffline) {
-      useAppStore.getState().setApiOffline(false);
-    }
-
     // ============================================
     // 2️⃣ USE YOUR ERROR HANDLER ✅
     // ============================================
-    // ✅ This handles ALL error formats including 422 with detail array
+    // ✅ Handles ALL FastAPI & main.py custom exception formats (422 details, 503 DB/Redis down, domain errors)
     const finalMessage = getErrorMessage(status, data)
+
+    if (status === 502 || status === 503 || status === 504) {
+      useAppStore.getState().setApiOffline(true, finalMessage || `Backend service temporarily unavailable (HTTP ${status}).`);
+    } else if (status && status < 500 && useAppStore.getState().isApiOffline) {
+      useAppStore.getState().setApiOffline(false);
+    }
 
     // ============================================
     // 3️⃣ SMART 401 HANDLING

@@ -16,87 +16,107 @@ export const ERROR_MESSAGES: Record<number, string> = {
     504: 'Gateway timeout. Please try again.',
 };
 
-// ✅ Extract human-readable error message from any error format
+// ✅ Map backend machine error codes from FastAPI main.py exception handlers
+const BACKEND_ERROR_CODE_MESSAGES: Record<string, string> = {
+    database_unavailable: 'Database is temporarily unavailable. Please try again.',
+    database_error: 'Invalid database operation.',
+    cache_unavailable: 'Cache service temporarily unavailable.',
+    infrastructure_unavailable: 'A required backend service is temporarily unavailable.',
+    forbidden: 'You do not have permission to perform this action.',
+};
+
+const formatValidationEntry = (entry: any): string => {
+    if (!entry) return 'Invalid input';
+    if (typeof entry === 'string') return entry;
+    const msg = entry.msg || entry.message;
+    if (msg) {
+        if (Array.isArray(entry.loc) && entry.loc.length > 0) {
+            const field = entry.loc[entry.loc.length - 1];
+            if (typeof field === 'string' && field !== 'body') {
+                return `${field}: ${msg}`;
+            }
+        }
+        return String(msg);
+    }
+    return JSON.stringify(entry);
+};
+
+// ✅ Extract human-readable error message from any FastAPI / custom handler error format
 export const extractErrorMessage = (data: any): string => {
-    // If data is a string, return it
     if (typeof data === 'string') return data;
-    
-    // If data is null/undefined
     if (!data) return 'An unknown error occurred';
-    
-    // ✅ Handle FastAPI 422 validation errors: { detail: [{ msg, loc, ... }] }
-    if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-        const firstError = data.detail[0];
-        if (firstError.msg) return firstError.msg;
-        if (firstError.message) return firstError.message;
-        return JSON.stringify(firstError);
+
+    // ✅ Handle FastAPI 422 validation errors:
+    //    - Default FastAPI shape: { detail: [{ msg, loc, ... }] }
+    //    - Custom main.py shape:  { error: "Validation failed", details: [{ msg, loc, ... }], request_id }
+    const validationArray = Array.isArray(data.details)
+        ? data.details
+        : Array.isArray(data.detail)
+        ? data.detail
+        : Array.isArray(data)
+        ? data
+        : null;
+
+    if (validationArray && validationArray.length > 0) {
+        return formatValidationEntry(validationArray[0]);
     }
-    
-    // ✅ Handle array of errors directly
-    if (Array.isArray(data) && data.length > 0) {
-        const firstError = data[0];
-        if (firstError.msg) return firstError.msg;
-        if (firstError.message) return firstError.message;
-        return JSON.stringify(firstError);
+
+    // ✅ Prefer explicit human-readable message/detail before machine error codes
+    if (data.message) {
+        return typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
     }
-    
-    // ✅ Handle single error object with detail string
-    if (data.detail && typeof data.detail === 'string') return data.detail;
-    
-    // ✅ Handle message/error fields
-    if (data.message) return typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
-    if (data.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-    
-    // ✅ Fallback
+
+    if (data.detail && typeof data.detail === 'string') {
+        return data.detail;
+    }
+
+    if (data.error) {
+        const errStr = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        return BACKEND_ERROR_CODE_MESSAGES[errStr] || errStr;
+    }
+
     return 'An unknown error occurred';
 };
 
-// ✅ Get field-specific errors from validation errors
+// ✅ Get field-specific errors from validation errors (supports both `detail` and `details`)
 export const extractFieldErrors = (data: any): Record<string, string> => {
     const fieldErrors: Record<string, string> = {};
-    
     if (!data) return fieldErrors;
-    
-    // ✅ Handle FastAPI 422 validation errors: { detail: [{ msg, loc, ... }] }
-    if (data.detail && Array.isArray(data.detail)) {
-        data.detail.forEach((item: any) => {
+
+    const validationArray = Array.isArray(data.details)
+        ? data.details
+        : Array.isArray(data.detail)
+        ? data.detail
+        : Array.isArray(data)
+        ? data
+        : null;
+
+    if (validationArray) {
+        validationArray.forEach((item: any) => {
             let field = 'general';
-            if (item.loc && Array.isArray(item.loc)) {
+            if (item?.loc && Array.isArray(item.loc)) {
                 const lastPath = item.loc[item.loc.length - 1];
                 field = typeof lastPath === 'string' ? lastPath : 'general';
             }
-            const message = item.msg || item.message || 'Invalid value';
-            fieldErrors[field] = message;
-        });
-    } else if (Array.isArray(data)) {
-        data.forEach((item: any) => {
-            let field = 'general';
-            if (item.loc && Array.isArray(item.loc)) {
-                const lastPath = item.loc[item.loc.length - 1];
-                field = typeof lastPath === 'string' ? lastPath : 'general';
-            }
-            const message = item.msg || item.message || 'Invalid value';
+            const message = item?.msg || item?.message || 'Invalid value';
             fieldErrors[field] = message;
         });
     }
-    
+
     return fieldErrors;
 };
 
 // ✅ Get error message by status code (with fallback to backend message)
 export const getErrorMessage = (status: number, data?: any): string => {
-    // 1️⃣ First priority: Backend error message
     if (data) {
         const extracted = extractErrorMessage(data);
         if (extracted && extracted !== 'An unknown error occurred') {
             return extracted;
         }
     }
-    
-    // 2️⃣ Second priority: Predefined message for this status
+
     const predefinedMessage = ERROR_MESSAGES[status];
     if (predefinedMessage) return predefinedMessage;
-    
-    // 3️⃣ Fallback
+
     return `Request failed with status ${status}`;
 };
