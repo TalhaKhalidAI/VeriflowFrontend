@@ -129,7 +129,6 @@ export const useAdminUsersQuery = (options: UserQueryOptions & { enabled?: boole
         }
         return [];
       },
-      staleTime: 1000 * 30,
   });
 };
 
@@ -169,7 +168,7 @@ export const useUpdateUserMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`Account for User #${vars.userId} updated`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to update account');
@@ -185,7 +184,7 @@ export const useDisableAccountMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`User #${vars.userId} account disabled`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to disable account');
@@ -201,7 +200,7 @@ export const useEnableAccountMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`User #${vars.userId} account enabled`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to enable account');
@@ -217,7 +216,7 @@ export const useDeleteAccountMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`User #${vars.userId} soft-deleted`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to delete account');
@@ -236,7 +235,7 @@ export const useRestoreAccountMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`User #${vars.userId} account restored`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to restore account');
@@ -309,7 +308,7 @@ export const useSetPermissionsMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`Permissions updated for User #${vars.user_id}`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to set permissions');
@@ -325,7 +324,7 @@ export const useBulkSetPermissionsMutation = () => {
     },
     onSuccess: () => {
       ToastMsgs.success('Bulk permissions assigned successfully');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to apply bulk permissions');
@@ -341,7 +340,7 @@ export const useRemovePermissionsMutation = () => {
     },
     onSuccess: (_, vars) => {
       ToastMsgs.success(`Permissions removed for User #${vars.user_id}`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to remove permissions');

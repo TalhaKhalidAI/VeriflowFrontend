@@ -17,7 +17,6 @@ export const useRulesQuery = (options?: { enabled?: boolean }) => {
       const data = await http.get<InventoryRuleListResponse>('/rules/');
       return data;
     },
-    staleTime: 1000 * 30,
     enabled: options?.enabled,
   });
 };
@@ -28,9 +27,18 @@ export const useCreateRuleMutation = () => {
     mutationFn: async (payload: CreateInventoryRulePayload) => {
       return await http.post<InventoryRule>('/rules/', payload);
     },
-    onSuccess: (newRule) => {
+    onSuccess: async (newRule) => {
       ToastMsgs.success(`Rule "${newRule.rule_name}" created`);
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      queryClient.setQueryData<InventoryRuleListResponse>(['rules'], (old) =>
+        old
+          ? {
+              ...old,
+              items: [newRule, ...old.items],
+              total: (old.total ?? old.items.length) + 1,
+            }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['rules'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to create rule');
@@ -44,9 +52,14 @@ export const useUpdateRuleMutation = () => {
     mutationFn: async ({ ruleId, payload }: { ruleId: string; payload: UpdateInventoryRulePayload }) => {
       return await http.put<InventoryRule>(`/rules/${ruleId}`, payload);
     },
-    onSuccess: (updated) => {
+    onSuccess: async (updated) => {
       ToastMsgs.success(`Rule "${updated.rule_name}" updated`);
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      queryClient.setQueryData<InventoryRuleListResponse>(['rules'], (old) =>
+        old
+          ? { ...old, items: old.items.map((r) => (r.id === updated.id ? updated : r)) }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['rules'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to update rule');
@@ -60,9 +73,14 @@ export const useToggleRuleStatusMutation = () => {
     mutationFn: async ({ ruleId, isActive }: { ruleId: string; isActive: boolean }) => {
       return await http.patch<InventoryRule>(`/rules/${ruleId}/status`, { is_active: isActive });
     },
-    onSuccess: (rule) => {
+    onSuccess: async (rule) => {
       ToastMsgs.info(`Rule "${rule.rule_name}" is now ${rule.is_active ? 'active' : 'inactive'}`);
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      queryClient.setQueryData<InventoryRuleListResponse>(['rules'], (old) =>
+        old
+          ? { ...old, items: old.items.map((r) => (r.id === rule.id ? rule : r)) }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['rules'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to update rule status');
@@ -76,9 +94,18 @@ export const useDeleteRuleMutation = () => {
     mutationFn: async (ruleId: string) => {
       return await http.delete(`/rules/${ruleId}`);
     },
-    onSuccess: () => {
+    onSuccess: async (_, deletedRuleId) => {
       ToastMsgs.success('Rule deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      queryClient.setQueryData<InventoryRuleListResponse>(['rules'], (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.filter((r) => r.id !== deletedRuleId),
+              total: Math.max(0, (old.total ?? old.items.length) - 1),
+            }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['rules'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to delete rule');
@@ -104,6 +131,5 @@ export const useApplicableRulesQuery = (keyId?: string) => {
       const url = keyId ? `/rules/applicable?key_id=${encodeURIComponent(keyId)}` : '/rules/applicable';
       return await http.get<InventoryRule[]>(url);
     },
-    staleTime: 1000 * 30,
   });
 };

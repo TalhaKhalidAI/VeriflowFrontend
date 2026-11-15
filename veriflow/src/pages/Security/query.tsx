@@ -20,7 +20,6 @@ export const useMFAStatusQuery = () => {
       const data = await http.get<MFAStatusResponse>('/mfa/status');
       return data;
     },
-    staleTime: 1000 * 30,
   });
 };
 

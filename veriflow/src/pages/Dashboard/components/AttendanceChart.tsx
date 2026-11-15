@@ -29,9 +29,7 @@ export function AttendanceChart({ shifts, users }: AttendanceChartProps) {
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.user_role?.toLowerCase() === 'admin';
   const canViewAllShifts =
     isAdmin ||
-    Boolean(currentUser?.permissions?.['shifts.view.any']) ||
-    Boolean(currentUser?.permissions?.['shifts.view.all']) ||
-    Boolean(currentUser?.permissions?.['shifts.view']);
+    Boolean(currentUser?.permissions?.['shifts.view.any']);
 
   const chartRef = useRef<any>(null);
   const [granularity, setGranularity] = useState<Granularity>('day');

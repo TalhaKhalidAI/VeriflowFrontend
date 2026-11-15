@@ -15,7 +15,7 @@ export const PERMISSION_MAP: Record<string, PermissionRequirement> = {
   dashboard: { permissions: [], mode: 'any' },
   keys: { permissions: ['keys.view', 'keys.create', 'keys.delete', 'keys.delete.any'], mode: 'any' },
   rules: { permissions: ['inventory_rules.view', 'inventory_rules.create', 'inventory_rules.update', 'inventory_rules.delete'], mode: 'any' },
-  shifts: { permissions: ['shifts.view', 'shifts.view.any', 'shifts.view.all', 'shifts.view.own', 'shifts.create', 'shifts.delete', 'shifts.delete.any'], mode: 'any' },
+  shifts: { permissions: ['shifts.view', 'shifts.view.any', 'shifts.create', 'shifts.delete', 'shifts.delete.any'], mode: 'any' },
   scans: { permissions: ['scans.view.any', 'scans.view.own', 'scans.create'], mode: 'any' },
   admin: {
     permissions: [

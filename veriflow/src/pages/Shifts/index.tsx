@@ -41,6 +41,7 @@ import {
   VisibilityRounded as EyeIcon,
   EditRounded as EditIcon,
   ReplayRounded as RestartIcon,
+  BlockRounded as RevokeIcon,
 } from '@mui/icons-material';
 import QRCode from 'qrcode';
 import {
@@ -52,6 +53,7 @@ import {
   useDeleteShiftMutation,
   useUpdateShiftMutation,
   useRestartShiftMutation,
+  useRevokeShiftMutation,
 } from './query';
 import type {
   StartShiftResponse,
@@ -72,17 +74,25 @@ export function ShiftsPage() {
   const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.user_role?.toLowerCase() === 'admin';
   const canDeleteAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.delete.any']);
   const canDeleteOwnShift = canDeleteAnyShift || Boolean(user?.permissions?.['shifts.delete']);
-  const canViewAny = isAdmin || Boolean(user?.permissions?.['shifts.view.any']) || Boolean(user?.permissions?.['shifts.view.all']) || canDeleteAnyShift;
-  const canViewSelf = canViewAny || Boolean(user?.permissions?.['shifts.view']) || Boolean(user?.permissions?.['shifts.view.own']) || canDeleteOwnShift;
+  const canViewAny = isAdmin || Boolean(user?.permissions?.['shifts.view.any']);
+  const canViewSelf = canViewAny || Boolean(user?.permissions?.['shifts.view']) || canDeleteOwnShift;
   const canCreateShift = isAdmin || Boolean(user?.permissions?.['shifts.create']);
   const canCheckoutShift = isAdmin || Boolean(user?.permissions?.['shifts.checkout']);
+  const canRevokeAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.revoke.any']);
+  const canRevokeOwnShift = canRevokeAnyShift || Boolean(user?.permissions?.['shifts.revoke']);
+  const canRevokeShiftRecord = (s?: ShiftRecord | null) =>
+    Boolean(s && s.status === 'active' && (canRevokeAnyShift || (canRevokeOwnShift && Number(s.user_id) === currentUserId)));
   const canUpdateAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.update.any']);
+  const canUpdateOwnShift = canUpdateAnyShift || Boolean(user?.permissions?.['shifts.update']);
 
   const canUpdateShiftRecord = (s?: ShiftRecord | null) =>
-    Boolean(s && (canUpdateAnyShift || Number(s.user_id) === currentUserId));
+    Boolean(s && (canUpdateAnyShift || (canUpdateOwnShift && isShiftSelfCreated(s))));
+
+  const canRestartAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.restart.any']);
+  const canRestartOwnShift = canRestartAnyShift || Boolean(user?.permissions?.['shifts.restart']);
 
   const canRestartShiftRecord = (s?: ShiftRecord | null) =>
-    Boolean(s && canCreateShift && (canUpdateAnyShift || canViewAny || Number(s.user_id) === currentUserId));
+    Boolean(s && (canRestartAnyShift || (canRestartOwnShift && isShiftSelfCreated(s))));
 
   const isShiftSelfCreated = (s?: ShiftRecord | null) =>
     Boolean(s && Number(s.user_id) === currentUserId && s.created_by != null && Number(s.created_by) === currentUserId);
@@ -151,11 +161,15 @@ export function ShiftsPage() {
   const deleteShiftMutation = useDeleteShiftMutation();
   const updateShiftMutation = useUpdateShiftMutation();
   const restartShiftMutation = useRestartShiftMutation();
+  const revokeShiftMutation = useRevokeShiftMutation();
 
   // Modals state
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const [selectedShiftInfo, setSelectedShiftInfo] = useState<ShiftRecord | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [revokeModalOpen, setRevokeModalOpen] = useState(false);
+  const [shiftToRevoke, setShiftToRevoke] = useState<ShiftRecord | null>(null);
+  const [revokeReason, setRevokeReason] = useState('');
   const [shiftToUpdate, setShiftToUpdate] = useState<ShiftRecord | null>(null);
   const [updateForm, setUpdateForm] = useState({
     user_id: '',
@@ -194,7 +208,7 @@ export function ShiftsPage() {
 
   // Fetch active inventory verification rules for shift assignment
   const { data: rulesData } = useQuery({
-    queryKey: ['shift_creator_rules'],
+    queryKey: ['rules', 'shift_creator'],
     queryFn: async () => {
       try {
         const res = await http.get<any>('/rules/');
@@ -203,7 +217,6 @@ export function ShiftsPage() {
         return [];
       }
     },
-    staleTime: 1000 * 30,
   });
   const availableRules: Array<{
     id: string;
@@ -404,6 +417,25 @@ export function ShiftsPage() {
     setTokenModalOpen(true);
   };
 
+  const handleOpenRevokeShift = (shift: ShiftRecord) => {
+    setShiftToRevoke(shift);
+    setRevokeReason('');
+    setRevokeModalOpen(true);
+  };
+
+  const handleConfirmRevokeShift = async () => {
+    if (!shiftToRevoke) return;
+    const trimmed = revokeReason.trim();
+    if (trimmed.length < 3) {
+      ToastMsgs.error('Revocation reason must be at least 3 characters');
+      return;
+    }
+    await revokeShiftMutation.mutateAsync({ shiftId: shiftToRevoke.id, reason: trimmed });
+    setRevokeModalOpen(false);
+    setShiftToRevoke(null);
+    setRevokeReason('');
+  };
+
   const handleOpenDeleteShift = (shift?: ShiftRecord | null) => {
     setSelectedShiftToDelete(shift || null);
     setShiftIdToDelete(shift?.id || '');
@@ -538,6 +570,9 @@ export function ShiftsPage() {
       onClick: (s: ShiftRecord) => handleOpenUpdateShift(s),
       render: (s: ShiftRecord) => {
         const allowed = canUpdateShiftRecord(s);
+        const lockReason = !canUpdateOwnShift
+          ? "Requires 'shifts.update' permission (Admin can grant this in Admin Console)"
+          : 'Cannot update: normal users can only update shifts they created themselves (not Admin-Assigned shifts)';
         return (
           <Button
             size="small"
@@ -546,10 +581,10 @@ export function ShiftsPage() {
             startIcon={<EditIcon sx={{ fontSize: 14 }} />}
             disabled={!allowed}
             onClick={() => handleOpenUpdateShift(s)}
-            title={allowed ? 'Update shift fields (PUT)' : "Only own shifts can be updated without 'shifts.update.any'"}
+            title={allowed ? 'Update shift fields (PUT)' : lockReason}
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            {allowed ? 'Update' : 'Update 🔒'}
+            {allowed ? 'Update' : !canUpdateOwnShift ? 'Update 🔒' : 'Admin-Created 🔒'}
           </Button>
         );
       },
@@ -562,6 +597,11 @@ export function ShiftsPage() {
       render: (s: ShiftRecord) => {
         const isActive = s.status === 'active';
         const allowed = canRestartShiftRecord(s);
+        const lockReason = isActive
+          ? 'Shift is already active'
+          : !canRestartOwnShift
+          ? "Requires 'shifts.restart' permission (Admin can grant this in Admin Console)"
+          : "Cannot restart: normal users can only restart shifts they created themselves (requires 'shifts.restart.any')";
         return (
           <Button
             size="small"
@@ -570,16 +610,10 @@ export function ShiftsPage() {
             startIcon={<RestartIcon sx={{ fontSize: 14 }} />}
             disabled={isActive || !allowed || restartShiftMutation.isPending}
             onClick={() => handleRestartShift(s)}
-            title={
-              isActive
-                ? 'Shift is already active'
-                : allowed
-                ? 'Restart same shift configuration'
-                : 'Insufficient permission to restart this shift'
-            }
+            title={allowed && !isActive ? 'Restart same shift configuration' : lockReason}
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            Restart
+            {isActive || allowed ? 'Restart' : !canRestartOwnShift ? 'Restart 🔒' : 'Admin-Created 🔒'}
           </Button>
         );
       },
@@ -606,6 +640,33 @@ export function ShiftsPage() {
         },
       ]
       : []),
+    {
+      label: 'Revoke',
+      variant: 'error' as const,
+      disabled: (s: ShiftRecord) => !canRevokeShiftRecord(s) || revokeShiftMutation.isPending,
+      onClick: (s: ShiftRecord) => handleOpenRevokeShift(s),
+      render: (s: ShiftRecord) => {
+        if (s.status !== 'active') return null;
+        const allowed = canRevokeShiftRecord(s);
+        const lockReason = !canRevokeOwnShift
+          ? "Requires 'shifts.revoke' permission (Admin can grant this in Admin Console)"
+          : "Only own active shifts can be revoked without 'shifts.revoke.any'";
+        return (
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            startIcon={<RevokeIcon sx={{ fontSize: 14 }} />}
+            disabled={!allowed || revokeShiftMutation.isPending}
+            onClick={() => handleOpenRevokeShift(s)}
+            title={allowed ? 'Forcefully revoke active shift' : lockReason}
+            sx={{ py: 0.25, px: 1, fontSize: 11 }}
+          >
+            {allowed ? 'Revoke' : 'Revoke 🔒'}
+          </Button>
+        );
+      },
+    },
     {
       label: 'Delete',
       variant: 'error' as const,
@@ -1939,6 +2000,56 @@ export function ShiftsPage() {
             disabled={updateShiftMutation.isPending}
           >
             {updateShiftMutation.isPending ? <CircularProgress size={20} /> : 'Save Shift Updates'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Revoke Active Shift Modal */}
+      <Dialog
+        open={revokeModalOpen}
+        onClose={() => setRevokeModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ color: '#F8FAFC', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <RevokeIcon sx={{ color: '#EF4444' }} /> Revoke Active Shift
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: '#1E293B', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+            Forcefully terminate active shift{' '}
+            <Box component="span" sx={{ color: '#F8FAFC', fontFamily: 'monospace', fontWeight: 700 }}>
+              {shiftToRevoke?.id?.slice(0, 8)}...
+            </Box>{' '}
+            for{' '}
+            <Box component="span" sx={{ color: '#F8FAFC', fontWeight: 700 }}>
+              {shiftToRevoke?.user_name || getUserLabel(shiftToRevoke?.user_id)}
+            </Box>
+            . The mobile scanner will be logged out immediately.
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            label="Revocation Reason"
+            value={revokeReason}
+            onChange={(e) => setRevokeReason(e.target.value)}
+            placeholder="e.g., Shift ended early by supervisor"
+            helperText="Minimum 3 characters required"
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>
+          <Button onClick={() => setRevokeModalOpen(false)} sx={{ color: '#94A3B8' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<RevokeIcon />}
+            onClick={handleConfirmRevokeShift}
+            disabled={revokeShiftMutation.isPending || revokeReason.trim().length < 3}
+          >
+            {revokeShiftMutation.isPending ? <CircularProgress size={20} /> : 'Revoke Shift'}
           </Button>
         </DialogActions>
       </Dialog>

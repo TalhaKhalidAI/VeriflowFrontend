@@ -10,8 +10,6 @@ export const useScansQuery = () => {
       const data = await http.get<ScanListResponse>('/scans/');
       return data;
     },
-    staleTime: 1000 * 20,
-    refetchInterval: 1000 * 30, // auto-refresh telemetry
   });
 };
 
@@ -21,9 +19,20 @@ export const useRecordScanMutation = () => {
     mutationFn: async (payload: RecordScanPayload) => {
       return await http.post<ScanRecord>('/scans/', payload);
     },
-    onSuccess: () => {
+    onSuccess: async (newScan) => {
       ToastMsgs.success('Manual scan record logged');
-      queryClient.invalidateQueries({ queryKey: ['scans'] });
+      if (newScan?.id !== undefined) {
+        queryClient.setQueryData<ScanListResponse>(['scans'], (old) =>
+          old
+            ? {
+                ...old,
+                items: [newScan, ...old.items],
+                total: (old.total ?? old.items.length) + 1,
+              }
+            : old
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: ['scans'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to log scan record');
@@ -51,9 +60,16 @@ export const useUpdateScanMutation = () => {
     mutationFn: async ({ scanId, status, reason }: { scanId: number; status?: string; reason?: string }) => {
       return await http.patch<ScanRecord>(`/scans/${scanId}`, { status, reason });
     },
-    onSuccess: () => {
+    onSuccess: async (updatedScan) => {
       ToastMsgs.success("Scan record updated successfully");
-      queryClient.invalidateQueries({ queryKey: ["scans"] });
+      if (updatedScan?.id !== undefined) {
+        queryClient.setQueryData<ScanListResponse>(['scans'], (old) =>
+          old
+            ? { ...old, items: old.items.map((s) => (s.id === updatedScan.id ? updatedScan : s)) }
+            : old
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: ["scans"], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || "Failed to update scan record");
@@ -67,9 +83,18 @@ export const useDeleteScanMutation = () => {
     mutationFn: async (scanId: number) => {
       return await http.delete<{ status: string; message: string }>(`/scans/${scanId}`);
     },
-    onSuccess: () => {
+    onSuccess: async (_, deletedScanId) => {
       ToastMsgs.success("Scan record deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ["scans"] });
+      queryClient.setQueryData<ScanListResponse>(['scans'], (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.filter((s) => s.id !== deletedScanId),
+              total: Math.max(0, (old.total ?? old.items.length) - 1),
+            }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ["scans"], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || "Failed to delete scan record");

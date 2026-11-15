@@ -27,7 +27,6 @@ export const useKeysQuery = (statusFilter?: string) => {
       const data = await http.get<KeyListResponse>(url);
       return data;
     },
-    staleTime: 1000 * 30,
   });
 };
 
@@ -60,7 +59,6 @@ export const useJWKSQuery = () => {
       const data = await http.get<JWKSResponse>('/keys/jwks');
       return data;
     },
-    staleTime: 1000 * 60,
   });
 };
 
@@ -70,9 +68,14 @@ export const useCreateKeyMutation = () => {
     mutationFn: async (payload: CreateKeyPayload) => {
       return await http.post<KeyRecord>('/keys/', payload);
     },
-    onSuccess: (newKey) => {
+    onSuccess: async (newKey) => {
       ToastMsgs.success(`Key "${newKey.name}" (${newKey.kid}) generated successfully`);
-      queryClient.invalidateQueries({ queryKey: ['keys'] });
+      queryClient.setQueriesData<KeyListResponse>({ queryKey: ['keys'] }, (old) =>
+        old && Array.isArray(old.items)
+          ? { ...old, items: [newKey, ...old.items], total: (old.total ?? old.items.length) + 1 }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['keys'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to generate key');
@@ -86,9 +89,9 @@ export const useRotateKeyMutation = () => {
     mutationFn: async (payload: RotateKeyPayload) => {
       return await http.post<KeyRecord>('/keys/rotate', payload);
     },
-    onSuccess: (newKey) => {
+    onSuccess: async (newKey) => {
       ToastMsgs.success(`Active key successfully rotated! New primary: ${newKey.kid}`);
-      queryClient.invalidateQueries({ queryKey: ['keys'] });
+      await queryClient.invalidateQueries({ queryKey: ['keys'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to rotate key');
@@ -102,9 +105,14 @@ export const useRevokeKeyMutation = () => {
     mutationFn: async ({ keyId, payload }: { keyId: string; payload: RevokeKeyPayload }) => {
       return await http.post<KeyRecord>(`/keys/${keyId}/revoke`, payload);
     },
-    onSuccess: (revokedKey) => {
+    onSuccess: async (revokedKey) => {
       ToastMsgs.warning(`Key ${revokedKey.kid} has been revoked`);
-      queryClient.invalidateQueries({ queryKey: ['keys'] });
+      queryClient.setQueriesData<KeyListResponse>({ queryKey: ['keys'] }, (old) =>
+        old && Array.isArray(old.items)
+          ? { ...old, items: old.items.map((k) => (k.id === revokedKey.id ? revokedKey : k)) }
+          : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['keys'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to revoke key');
@@ -182,12 +190,25 @@ export const useDeleteKeyMutation = () => {
       const url = force ? `/keys/${keyId}?force=true` : `/keys/${keyId}`;
       return await http.delete<DeleteKeyResponse>(url);
     },
-    onSuccess: (res) => {
+    onSuccess: async (res, vars) => {
       const extra = res.removed_shifts ? ` (+${res.removed_shifts} shifts, ${res.removed_scans} scans)` : '';
       ToastMsgs.warning(`Key ${res.key.kid} permanently deleted${extra}`);
-      queryClient.invalidateQueries({ queryKey: ['keys'] });
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      const deletedId = res?.key?.id || vars.keyId;
+      queryClient.setQueriesData<KeyListResponse>({ queryKey: ['keys'] }, (old) =>
+        old && Array.isArray(old.items)
+          ? {
+              ...old,
+              items: old.items.filter((k) => k.id !== deletedId),
+              total: Math.max(0, (old.total ?? old.items.length) - 1),
+            }
+          : old
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['keys'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['rules'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['scans'], refetchType: 'active' }),
+      ]);
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to delete key');

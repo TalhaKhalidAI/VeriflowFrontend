@@ -41,9 +41,7 @@ export function DashboardPage() {
 
   const canViewOtherShifts =
     isAdmin ||
-    Boolean(user?.permissions?.['shifts.view.any']) ||
-    Boolean(user?.permissions?.['shifts.view.all']) ||
-    Boolean(user?.permissions?.['shifts.view']);
+    Boolean(user?.permissions?.['shifts.view.any']);
   const canViewOtherRules = isAdmin;
 
   // If user has shifts.view permission (or admin), they can view all shifts telemetry; else strictly only their own

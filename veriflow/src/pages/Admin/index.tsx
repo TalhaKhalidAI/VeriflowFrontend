@@ -189,9 +189,21 @@ export const AdminPage: React.FC = () => {
     setIssuedTempToken(res.temp_token || res.token || 'TOKEN_ISSUED_IN_COOKIE');
   };
 
+  const filterValidPerms = (permsObj?: Record<string, boolean> | null) => {
+    const validSet = new Set(allPermissions);
+    const cleaned: Record<string, boolean> = {};
+    if (!permsObj) return cleaned;
+    for (const [k, v] of Object.entries(permsObj)) {
+      if ((validSet.size === 0 || validSet.has(k)) && PERMISSION_METADATA[k]) {
+        cleaned[k] = Boolean(v);
+      }
+    }
+    return cleaned;
+  };
+
   const handleOpenPermMatrix = (user: AdminUser) => {
     setPermMatrixUser(user);
-    setUserPerms({ ...user.permissions });
+    setUserPerms(filterValidPerms(user.permissions));
     setActiveTab(1);
   };
 
@@ -204,14 +216,15 @@ export const AdminPage: React.FC = () => {
 
   const handleSaveUserPerms = async () => {
     if (!permMatrixUser) return;
+    const cleanedPerms = filterValidPerms(userPerms);
     await setPermsMutation.mutateAsync({
       user_id: permMatrixUser.id,
-      permissions: userPerms,
+      permissions: cleanedPerms,
     });
     if (user && String(user.id) === String(permMatrixUser.id)) {
       useAuthStore.getState().setUser({
         ...user,
-        permissions: userPerms,
+        permissions: cleanedPerms,
       });
     }
   };
@@ -228,7 +241,7 @@ export const AdminPage: React.FC = () => {
   // Group permissions by category
   const permissionGroups = React.useMemo(() => {
     const groups: Record<string, string[]> = {};
-    allPermissions.forEach((p) => {
+    allPermissions.filter((p) => Boolean(PERMISSION_METADATA[p])).forEach((p) => {
       const parts = p.split('.');
       const category = parts[0] ? parts[0].toUpperCase() : 'GENERAL';
       if (!groups[category]) groups[category] = [];

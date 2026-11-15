@@ -32,9 +32,7 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
       Number(s.created_by) === currentUserId);
   const canViewOthers =
     isAdmin ||
-    Boolean(currentUser?.permissions?.['shifts.view.any']) ||
-    Boolean(currentUser?.permissions?.['shifts.view.all']) ||
-    Boolean(currentUser?.permissions?.['shifts.view']);
+    Boolean(currentUser?.permissions?.['shifts.view.any']);
   const [viewTab, setViewTab] = useState<ViewTab>('tabular');
   const [filterMode, setFilterMode] = useState<FilterMode>('time');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');

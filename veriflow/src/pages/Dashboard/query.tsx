@@ -32,6 +32,5 @@ export const useDashboardOverviewQuery = () => {
         invalidScansCount: invalidScans,
       };
     },
-    staleTime: 1000 * 15,
   });
 };

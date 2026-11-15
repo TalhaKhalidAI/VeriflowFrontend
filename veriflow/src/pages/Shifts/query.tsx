@@ -25,7 +25,6 @@ export const useActiveShiftQuery = () => {
         throw err;
       }
     },
-    staleTime: 1000 * 15,
   });
 };
 
@@ -36,7 +35,6 @@ export const useShiftsQuery = (options?: { enabled?: boolean }) => {
       const data = await http.get<ShiftListResponse>('/shifts/');
       return data;
     },
-    staleTime: 1000 * 30,
     enabled: options?.enabled,
   });
 };
@@ -62,9 +60,9 @@ export const useStartShiftMutation = () => {
       }
       return await http.post<StartShiftResponse>(`/shifts/start?qr_only=false&include_rules=${incRules}`, payload);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       ToastMsgs.success('Work shift started successfully!');
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to start shift');
@@ -100,9 +98,9 @@ export const useReissueActiveShiftMutation = () => {
       }
       return await http.post<ReissueShiftResponse>(url);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       ToastMsgs.success('Active shift token re-issued with current rules');
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to reissue shift token');
@@ -119,9 +117,19 @@ export const useCheckoutShiftMutation = () => {
       }
       return await http.post<ShiftRecord>('/shifts/checkout');
     },
-    onSuccess: () => {
+    onSuccess: async (updatedShift) => {
       ToastMsgs.success('Work shift checked out and session ended.');
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      if (updatedShift?.id) {
+        queryClient.setQueryData<ShiftListResponse>(['shifts'], (old) =>
+          old
+            ? { ...old, items: old.items.map((s) => (s.id === updatedShift.id ? updatedShift : s)) }
+            : old
+        );
+        queryClient.setQueryData<ShiftRecord | null>(['shifts', 'active', 'me'], (old) =>
+          old && old.id === updatedShift.id ? null : old
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to checkout shift');
@@ -135,10 +143,25 @@ export const useDeleteShiftMutation = () => {
     mutationFn: async (shiftId: string) => {
       return await http.delete<DeleteShiftResponse>(`/shifts/${shiftId}`);
     },
-    onSuccess: (res) => {
-      ToastMsgs.warning(`Shift ${res.shift.id.slice(0, 8)} permanently deleted (${res.removed_scans} scans removed)`);
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
-      queryClient.invalidateQueries({ queryKey: ['scans'] });
+    onSuccess: async (res, deletedShiftId) => {
+      const targetId = res?.shift?.id || deletedShiftId;
+      ToastMsgs.warning(`Shift ${targetId.slice(0, 8)} permanently deleted (${res?.removed_scans ?? 0} scans removed)`);
+      queryClient.setQueryData<ShiftListResponse>(['shifts'], (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.filter((s) => s.id !== targetId),
+              total: Math.max(0, (old.total ?? old.items.length) - 1),
+            }
+          : old
+      );
+      queryClient.setQueryData<ShiftRecord | null>(['shifts', 'active', 'me'], (old) =>
+        old && old.id === targetId ? null : old
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['scans'], refetchType: 'active' }),
+      ]);
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to delete shift');
@@ -153,9 +176,15 @@ export const useUpdateShiftMutation = () => {
     mutationFn: async ({ shiftId, payload }: { shiftId: string; payload: UpdateShiftPayload }) => {
       return await http.put<ShiftRecord>(`/shifts/${shiftId}`, payload);
     },
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       ToastMsgs.success(`Shift ${res.id.slice(0, 8)} updated successfully!`);
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      queryClient.setQueryData<ShiftListResponse>(['shifts'], (old) =>
+        old ? { ...old, items: old.items.map((s) => (s.id === res.id ? res : s)) } : old
+      );
+      queryClient.setQueryData<ShiftRecord | null>(['shifts', 'active', 'me'], (old) =>
+        old && old.id === res.id ? res : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to update shift');
@@ -169,12 +198,35 @@ export const useRestartShiftMutation = () => {
     mutationFn: async ({ shiftId, includeRules = true }: { shiftId: string; includeRules?: boolean }) => {
       return await http.post<StartShiftResponse>(`/shifts/${shiftId}/restart?include_rules=${includeRules}`);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       ToastMsgs.success('Shift restarted with same configuration!');
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.message || 'Failed to restart shift');
+    },
+  });
+};
+
+
+export const useRevokeShiftMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ shiftId, reason }: { shiftId: string; reason: string }) => {
+      return await http.post<ShiftRecord>(`/shifts/${shiftId}/revoke`, { reason });
+    },
+    onSuccess: async (res) => {
+      ToastMsgs.warning(`Shift ${res.id.slice(0, 8)} revoked and terminated.`);
+      queryClient.setQueryData<ShiftListResponse>(['shifts'], (old) =>
+        old ? { ...old, items: old.items.map((s) => (s.id === res.id ? res : s)) } : old
+      );
+      queryClient.setQueryData<ShiftRecord | null>(['shifts', 'active', 'me'], (old) =>
+        old && old.id === res.id ? null : old
+      );
+      await queryClient.invalidateQueries({ queryKey: ['shifts'], refetchType: 'active' });
+    },
+    onError: (err: any) => {
+      ToastMsgs.error(err?.message || 'Failed to revoke shift');
     },
   });
 };
