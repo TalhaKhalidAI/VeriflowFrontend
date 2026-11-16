@@ -571,21 +571,18 @@ export function ShiftsPage() {
       onClick: (s: ShiftRecord) => handleOpenUpdateShift(s),
       render: (s: ShiftRecord) => {
         const allowed = canUpdateShiftRecord(s);
-        const lockReason = !canUpdateOwnShift
-          ? "Requires 'shifts.update' permission (Admin can grant this in Admin Console)"
-          : 'Cannot update: normal users can only update shifts they created themselves (not Admin-Assigned shifts)';
+        if (!allowed) return null;
         return (
           <Button
             size="small"
             variant="outlined"
             color="primary"
             startIcon={<EditIcon sx={{ fontSize: 14 }} />}
-            disabled={!allowed}
             onClick={() => handleOpenUpdateShift(s)}
-            title={allowed ? 'Update shift fields (PUT)' : lockReason}
+            title="Update shift fields (PUT)"
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            {allowed ? 'Update' : !canUpdateOwnShift ? 'Update 🔒' : 'Admin-Created 🔒'}
+            Update
           </Button>
         );
       },
@@ -598,23 +595,19 @@ export function ShiftsPage() {
       render: (s: ShiftRecord) => {
         const isActive = s.status === 'active';
         const allowed = canRestartShiftRecord(s);
-        const lockReason = isActive
-          ? 'Shift is already active'
-          : !canRestartOwnShift
-          ? "Requires 'shifts.restart' permission (Admin can grant this in Admin Console)"
-          : "Cannot restart: normal users can only restart shifts they created themselves (requires 'shifts.restart.any')";
+        if (isActive || !allowed) return null;
         return (
           <Button
             size="small"
             variant="outlined"
             color="success"
             startIcon={<RestartIcon sx={{ fontSize: 14 }} />}
-            disabled={isActive || !allowed || restartShiftMutation.isPending}
+            disabled={restartShiftMutation.isPending}
             onClick={() => handleRestartShift(s)}
-            title={allowed && !isActive ? 'Restart same shift configuration' : lockReason}
+            title="Restart same shift configuration"
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            {isActive || allowed ? 'Restart' : !canRestartOwnShift ? 'Restart 🔒' : 'Admin-Created 🔒'}
+            Restart
           </Button>
         );
       },
@@ -649,21 +642,19 @@ export function ShiftsPage() {
       render: (s: ShiftRecord) => {
         if (s.status !== 'active') return null;
         const allowed = canRevokeShiftRecord(s);
-        const lockReason = !canRevokeOwnShift
-          ? "Requires 'shifts.revoke' permission (Admin can grant this in Admin Console)"
-          : "Only own active shifts can be revoked without 'shifts.revoke.any'";
+        if (!allowed) return null;
         return (
           <Button
             size="small"
             variant="outlined"
             color="error"
             startIcon={<RevokeIcon sx={{ fontSize: 14 }} />}
-            disabled={!allowed || revokeShiftMutation.isPending}
+            disabled={revokeShiftMutation.isPending}
             onClick={() => handleOpenRevokeShift(s)}
-            title={allowed ? 'Forcefully revoke active shift' : lockReason}
+            title="Forcefully revoke active shift"
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            {allowed ? 'Revoke' : 'Revoke 🔒'}
+            Revoke
           </Button>
         );
       },
@@ -675,21 +666,19 @@ export function ShiftsPage() {
       onClick: (s: ShiftRecord) => handleOpenDeleteShift(s),
       render: (s: ShiftRecord) => {
         const allowed = canDeleteShiftRecord(s);
-        const lockReason = !canDeleteOwnShift
-          ? "Requires 'shifts.delete' permission (Admin can grant this in Admin Console)"
-          : 'Cannot delete: normal users can only delete shifts they created themselves (not shifts created by Admin or another user)';
+        if (!allowed) return null;
         return (
           <Button
             size="small"
             variant="outlined"
             color="error"
             startIcon={<DeleteIcon sx={{ fontSize: 14 }} />}
-            disabled={!allowed || deleteShiftMutation.isPending}
+            disabled={deleteShiftMutation.isPending}
             onClick={() => handleOpenDeleteShift(s)}
-            title={allowed ? 'Permanently delete this shift and its scan logs' : lockReason}
+            title="Permanently delete this shift and its scan logs"
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
-            {allowed ? 'Delete' : !canDeleteOwnShift ? 'Delete 🔒' : 'Admin-Created 🔒'}
+            Delete
           </Button>
         );
       },
@@ -799,30 +788,24 @@ export function ShiftsPage() {
               )}
             </>
           )}
-          <Button
-            size="small"
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={() => {
-              if (!canDeleteOwnShift) {
-                ToastMsgs.error("Requires 'shifts.delete' permission to delete shifts");
-                return;
+          {canDeleteOwnShift && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => handleOpenDeleteShift(null)}
+              disabled={deleteShiftMutation.isPending}
+              title={
+                canDeleteAnyShift
+                  ? 'Admin: Delete any shift by valid UUID'
+                  : 'Delete your own self-created shift'
               }
-              handleOpenDeleteShift(null);
-            }}
-            disabled={!canDeleteOwnShift || deleteShiftMutation.isPending}
-            title={
-              canDeleteAnyShift
-                ? 'Admin: Delete any shift by valid UUID'
-                : canDeleteOwnShift
-                  ? 'Delete your own self-created shift'
-                  : "Requires 'shifts.delete' permission"
-            }
-            sx={{ borderColor: 'rgba(239, 68, 68, 0.45)', color: '#F87171' }}
-          >
-            {canDeleteAnyShift ? 'Delete Shift by ID' : canDeleteOwnShift ? 'Delete Own Shift' : 'Delete Shift 🔒'}
-          </Button>
+              sx={{ borderColor: 'rgba(239, 68, 68, 0.45)', color: '#F87171' }}
+            >
+              {canDeleteAnyShift ? 'Delete Shift by ID' : 'Delete Own Shift'}
+            </Button>
+          )}
         </Stack>
       </Box>
 

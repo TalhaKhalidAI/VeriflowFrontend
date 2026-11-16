@@ -707,13 +707,11 @@ export function KeysPage() {
         setRevokeModalOpen(true);
       },
     }] : []),
-    {
+    ...((canDeleteOwnKey || canDeleteAnyKey) ? [{
       icon: <DeleteIcon fontSize="small" />,
       title: canDeleteAnyKey
         ? 'Permanently Delete Key (Admin)'
-        : !canDeleteOwnKey
-          ? "Requires 'keys.delete' permission to delete keys"
-          : 'Permanently Delete Key (Only keys you created yourself; Admin-assigned keys are locked)',
+        : 'Permanently Delete Key (Only keys you created yourself)',
       variant: 'error' as const,
       disabled: (k: KeyRecord) => !canDeleteKeyRecord(k),
       onClick: (k: KeyRecord) => {
@@ -721,7 +719,7 @@ export function KeysPage() {
         setSelectedKeyForDelete(k);
         setDeleteKeyModalOpen(true);
       },
-    },
+    }] : []),
   ];
 
   return (
@@ -799,23 +797,16 @@ export function KeysPage() {
             </button>
           )}
 
-          <button
-            onClick={() => {
-              if (!canCreateTags) {
-                setTagTab(1);
-              }
-              setTagModalOpen(true);
-            }}
-            className={
-              canCreateTags
-                ? "btn btn-sm bg-[#0F172A] border border-[#1E293B] hover:border-yellow-400 text-slate-300 hover:text-yellow-400 font-mono text-xs font-semibold gap-1.5 transition-all shadow-sm"
-                : "btn btn-sm bg-[#0F172A] border border-slate-800 text-slate-500 hover:border-slate-700 font-mono text-xs font-semibold gap-1.5 transition-all shadow-sm"
-            }
-            title={canCreateTags ? "Product Tag QR Engine (RS256 Signed)" : "Requires tags.create permission to generate tags"}
-          >
-            <QrCodeIcon sx={{ fontSize: 16, color: canCreateTags ? '#FACC15' : '#64748B' }} />
-            <span>Product Tag QR {!canCreateTags && '🔒'}</span>
-          </button>
+          {canCreateTags && (
+            <button
+              onClick={() => setTagModalOpen(true)}
+              className="btn btn-sm bg-[#0F172A] border border-[#1E293B] hover:border-yellow-400 text-slate-300 hover:text-yellow-400 font-mono text-xs font-semibold gap-1.5 transition-all shadow-sm"
+              title="Product Tag QR Engine (RS256 Signed)"
+            >
+              <QrCodeIcon sx={{ fontSize: 16, color: '#FACC15' }} />
+              <span>Product Tag QR</span>
+            </button>
+          )}
 
           <button
             onClick={() => setJwksModalOpen(true)}

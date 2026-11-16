@@ -65,12 +65,26 @@ import { OtpBoxesInput } from '../../components/OtpModal';
 import { Table, type TableColumn } from '../../components/Table';
 import { WindowPanel } from '../../components/WindowPanel';
 import { PERMISSION_METADATA } from '../../config/permissionsMetadata';
+import { http } from '../../api/http/https';
 import { CloseRounded as CloseIcon } from '@mui/icons-material';
 
 export const AdminPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const { data: mfaStatus } = useMFAStatusQuery();
   const isMFAEnabled = Boolean(user?.mfa_enabled || mfaStatus?.mfa_enabled);
+  const activeMFAMethod = (user?.mfa_method || mfaStatus?.mfa_method || 'totp').toLowerCase();
+  const myPerms = user?.permissions || {};
+  const isSelfAdminQuick =
+    user?.role?.toLowerCase() === 'admin' || user?.user_role?.toLowerCase() === 'admin';
+  const canManagePerms =
+    isSelfAdminQuick || Boolean(myPerms['admin.users.promote']) || Boolean(myPerms['user.promote']);
+  const canResetAutoKill = isSelfAdminQuick || Boolean(myPerms['admin.system.kill_switch']);
+  const canViewDirectory =
+    isSelfAdminQuick ||
+    Boolean(myPerms['admin.users.view']) ||
+    Boolean(myPerms['admin.users']) ||
+    Boolean(myPerms['user.view.any']) ||
+    Boolean(myPerms['admin.access']);
 
   const [showDisabled, setShowDisabled] = useState(true);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -106,6 +120,15 @@ export const AdminPage: React.FC = () => {
 
   const [autoKillDialogOpen, setAutoKillDialogOpen] = useState(false);
   const [autoKillOtp, setAutoKillOtp] = useState('');
+
+  const [actionConfirmModal, setActionConfirmModal] = useState<{
+    open: boolean;
+    actionType: 'enable' | 'disable' | 'delete' | 'restore';
+    targetUser: AdminUser | null;
+  }>({ open: false, actionType: 'disable', targetUser: null });
+  const [actionPassword, setActionPassword] = useState('');
+  const [actionOtp, setActionOtp] = useState('');
+  const [isSendingActionOtp, setIsSendingActionOtp] = useState(false);
 
   const [permMatrixUser, setPermMatrixUser] = useState<AdminUser | null>(null);
   const [userPerms, setUserPerms] = useState<Record<string, boolean>>({});
@@ -170,6 +193,48 @@ export const AdminPage: React.FC = () => {
       },
     });
     setPasswordDialogOpen(false);
+  };
+
+  const openActionConfirmModal = (
+    actionType: 'enable' | 'disable' | 'delete' | 'restore',
+    targetUser: AdminUser
+  ) => {
+    setActionPassword('');
+    setActionOtp('');
+    setActionConfirmModal({ open: true, actionType, targetUser });
+  };
+
+  const handleSendActionEmailOtp = async () => {
+    setIsSendingActionOtp(true);
+    try {
+      await http.post('/mfa/send_genaric_otp?purpose=mfa_stepup');
+      ToastMsgs.info('Verification OTP sent to your registered email.');
+    } catch (err: any) {
+      ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to send OTP');
+    } finally {
+      setIsSendingActionOtp(false);
+    }
+  };
+
+  const handleConfirmAccountAction = async () => {
+    const { actionType, targetUser } = actionConfirmModal;
+    if (!targetUser) return;
+    const payload = {
+      password: actionPassword.trim() || undefined,
+      otp: actionOtp.trim() || undefined,
+    };
+    if (actionType === 'enable') {
+      await enableMutation.mutateAsync({ userId: targetUser.id, payload });
+    } else if (actionType === 'disable') {
+      await disableMutation.mutateAsync({ userId: targetUser.id, payload });
+    } else if (actionType === 'delete') {
+      await deleteMutation.mutateAsync({ userId: targetUser.id, payload });
+    } else if (actionType === 'restore') {
+      await restoreMutation.mutateAsync({ userId: targetUser.id, otp: actionOtp.trim() || undefined });
+    }
+    setActionConfirmModal({ open: false, actionType: 'disable', targetUser: null });
+    setActionPassword('');
+    setActionOtp('');
   };
 
   const handleOpenTempToken = (user: AdminUser) => {
@@ -547,7 +612,7 @@ export const AdminPage: React.FC = () => {
         hideOnMobile: true,
         render: (_, u) => {
           const permCount = Object.keys(u.permissions || {}).length;
-          return (
+          return canManagePerms ? (
             <Button
               size="small"
               variant="text"
@@ -556,6 +621,10 @@ export const AdminPage: React.FC = () => {
             >
               {u.role === 'admin' ? 'Admin Full Access' : `${permCount} grants`}
             </Button>
+          ) : (
+            <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+              {u.role === 'admin' ? 'Admin Full Access' : `${permCount} grants`}
+            </Typography>
           );
         },
       });
@@ -636,7 +705,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Enable Account">
               <IconButton
                 size="small"
-                onClick={() => enableMutation.mutate({ userId: u.id })}
+                onClick={() => openActionConfirmModal('enable', u)}
                 sx={{ color: '#10B981' }}
               >
                 <UserCheck fontSize="small" />
@@ -648,7 +717,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Disable Account">
               <IconButton
                 size="small"
-                onClick={() => disableMutation.mutate({ userId: u.id })}
+                onClick={() => openActionConfirmModal('disable', u)}
                 sx={{ color: '#EF4444' }}
               >
                 <UserX fontSize="small" />
@@ -661,7 +730,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Restore Account">
               <IconButton
                 size="small"
-                onClick={() => restoreMutation.mutate({ userId: u.id })}
+                onClick={() => openActionConfirmModal('restore', u)}
                 sx={{ color: '#10B981' }}
               >
                 <RotateCcw fontSize="small" />
@@ -673,7 +742,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Delete Account">
               <IconButton
                 size="small"
-                onClick={() => deleteMutation.mutate({ userId: u.id })}
+                onClick={() => openActionConfirmModal('delete', u)}
                 sx={{ color: '#64748B', '&:hover': { color: '#EF4444' } }}
               >
                 <Trash2 fontSize="small" />
@@ -726,23 +795,25 @@ export const AdminPage: React.FC = () => {
           >
             Refresh
           </Button>
-          <Button
-            size="small"
-            variant="contained"
-            color="error"
-            startIcon={<ShieldAlert fontSize="small" />}
-            onClick={() => setAutoKillDialogOpen(true)}
-            sx={{ fontWeight: 700 }}
-          >
-            Reset Auto-Kill
-          </Button>
+          {canResetAutoKill && (
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              startIcon={<ShieldAlert fontSize="small" />}
+              onClick={() => setAutoKillDialogOpen(true)}
+              sx={{ fontWeight: 700 }}
+            >
+              Reset Auto-Kill
+            </Button>
+          )}
         </Box>
       </Box>
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: '#1E293B', mb: 3 }}>
         <Tabs
-          value={activeTab}
+          value={canManagePerms ? activeTab : 0}
           onChange={(_, val) => setActiveTab(val)}
           textColor="inherit"
           variant="scrollable"
@@ -750,32 +821,37 @@ export const AdminPage: React.FC = () => {
           allowScrollButtonsMobile
         >
           <Tab label="User Management & Security" icon={<Users fontSize="small" />} iconPosition="start" />
-          <Tab
-            label={permMatrixUser ? `Permissions (${permMatrixUser.email})` : 'Permission Matrix'}
-            icon={<KeyRound fontSize="small" />}
-            iconPosition="start"
-          />
-          <Tab label="Bulk Permission Matrix" icon={<Lock fontSize="small" />} iconPosition="start" />
+          {canManagePerms && (
+            <Tab
+              label={permMatrixUser ? `Permissions (${permMatrixUser.email})` : 'Permission Matrix'}
+              icon={<KeyRound fontSize="small" />}
+              iconPosition="start"
+            />
+          )}
+          {canManagePerms && (
+            <Tab label="Bulk Permission Matrix" icon={<Lock fontSize="small" />} iconPosition="start" />
+          )}
         </Tabs>
       </Box>
 
       {/* TAB 0: USERS LIST */}
-      {activeTab === 0 && (
+      {(activeTab === 0 || !canManagePerms) && (
         <Card sx={{ bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2 }}>
           {/* Checkboxes Filter Bar */}
-          <Box
-            sx={{
-              p: 2,
-              px: 2.5,
-              borderBottom: '1px solid #1E293B',
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 2,
-              bgcolor: 'rgba(11, 19, 43, 0.6)',
-            }}
-          >
+          {canViewDirectory && (
+            <Box
+              sx={{
+                p: 2,
+                px: 2.5,
+                borderBottom: '1px solid #1E293B',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 2,
+                bgcolor: 'rgba(11, 19, 43, 0.6)',
+              }}
+            >
             <Typography variant="subtitle2" sx={{ color: '#94A3B8', fontWeight: 600 }}>
               Display & Security Filters:
             </Typography>
@@ -827,6 +903,7 @@ export const AdminPage: React.FC = () => {
               />
             </Box>
           </Box>
+          )}
           <CardContent sx={{ p: 0 }}>
             <Table<AdminUser>
               columns={userColumns}
@@ -845,7 +922,7 @@ export const AdminPage: React.FC = () => {
       )}
 
       {/* TAB 1: PERMISSION MATRIX FOR SINGLE USER */}
-      {activeTab === 1 && (
+      {canManagePerms && activeTab === 1 && (
         <Grid container spacing={2.5} direction={swapSingleLayout ? 'row-reverse' : 'row'}>
           {/* Left / Top (on mobile): Separate Users Table */}
           <Grid
@@ -980,7 +1057,7 @@ export const AdminPage: React.FC = () => {
       )}
 
       {/* TAB 2: BULK PERMISSION MATRIX */}
-      {activeTab === 2 && (
+      {canManagePerms && activeTab === 2 && (
         <Grid container spacing={2.5} direction={swapBulkLayout ? 'row-reverse' : 'row'}>
           {/* Target Users Table */}
           <Grid
@@ -1423,6 +1500,97 @@ export const AdminPage: React.FC = () => {
             disabled={resetKillMutation.isPending}
           >
             Confirm Reset
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ACCOUNT ACTION CONFIRMATION DIALOG (Enable / Disable / Delete / Restore with Password + 2FA) */}
+      <Dialog
+        open={actionConfirmModal.open}
+        onClose={() => setActionConfirmModal({ open: false, actionType: 'disable', targetUser: null })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#0B132B', color: '#F8FAFC', fontWeight: 700 }}>
+          {actionConfirmModal.actionType === 'enable'
+            ? 'Enable User Account'
+            : actionConfirmModal.actionType === 'disable'
+              ? 'Disable User Account'
+              : actionConfirmModal.actionType === 'restore'
+                ? 'Restore User Account'
+                : 'Delete User Account'}
+        </DialogTitle>
+        <DialogContent sx={{ bgcolor: '#0B132B', pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" sx={{ color: '#94A3B8', mt: 0.5 }}>
+            Confirm {actionConfirmModal.actionType} for{' '}
+            <strong style={{ color: '#F8FAFC' }}>
+              {actionConfirmModal.targetUser?.name || actionConfirmModal.targetUser?.email}
+            </strong>
+            .
+          </Typography>
+
+          {actionConfirmModal.actionType !== 'restore' && (
+            <TextField
+              label={isSelfAdminQuick ? 'Your Password (Optional for Admin)' : 'Your Password'}
+              type="password"
+              value={actionPassword}
+              onChange={(e) => setActionPassword(e.target.value)}
+              fullWidth
+              size="small"
+            />
+          )}
+
+          {isMFAEnabled && (
+            <Box sx={{ mt: 0.5 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: '#38BDF8', fontWeight: 700, display: 'block', textAlign: 'center', mb: 0.75 }}
+              >
+                {activeMFAMethod === 'email'
+                  ? '2FA Email Verification Code (6 Digits)'
+                  : '2FA Authenticator TOTP Code (6 Digits)'}
+              </Typography>
+              <OtpBoxesInput value={actionOtp} onChange={setActionOtp} />
+              {activeMFAMethod === 'email' && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    disabled={isSendingActionOtp}
+                    onClick={handleSendActionEmailOtp}
+                    sx={{ fontSize: '0.75rem', color: '#38BDF8' }}
+                  >
+                    {isSendingActionOtp ? 'Sending OTP...' : 'Send Email OTP'}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>
+          <Button
+            onClick={() => setActionConfirmModal({ open: false, actionType: 'disable', targetUser: null })}
+            sx={{ color: '#94A3B8' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color={
+              actionConfirmModal.actionType === 'enable' || actionConfirmModal.actionType === 'restore'
+                ? 'success'
+                : 'error'
+            }
+            onClick={handleConfirmAccountAction}
+            disabled={
+              enableMutation.isPending ||
+              disableMutation.isPending ||
+              deleteMutation.isPending ||
+              restoreMutation.isPending ||
+              (isMFAEnabled && actionOtp.trim().length < 6)
+            }
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>

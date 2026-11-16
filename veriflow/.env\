@@ -1,0 +1,4 @@
+VITE_API_URL=http://localhost:8000/app/v1
+# VITE_API_URL=https://veriflow.talhahub.io/api
+# VITE_API_URL=https://veriflow-api-sandy.vercel.app/app/v1
+#VITE_API_URL=https://veriflowapi.vercel.app/app/v1
