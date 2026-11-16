@@ -63,6 +63,7 @@ import { useMFAStatusQuery } from '../Security/query';
 import { ToastMsgs } from '../../api/toastUtils';
 import { OtpBoxesInput } from '../../components/OtpModal';
 import { Table, type TableColumn } from '../../components/Table';
+import { WindowPanel } from '../../components/WindowPanel';
 import { PERMISSION_METADATA } from '../../config/permissionsMetadata';
 import { CloseRounded as CloseIcon } from '@mui/icons-material';
 
@@ -249,6 +250,220 @@ export const AdminPage: React.FC = () => {
     });
     return groups;
   }, [allPermissions]);
+
+  const [permCategoryFilter, setPermCategoryFilter] = useState<string>('ALL');
+  const [bulkCategoryFilter, setBulkCategoryFilter] = useState<string>('ALL');
+  const [fullscreenPanel, setFullscreenPanel] = useState<'single-users' | 'single-perms' | 'bulk-users' | 'bulk-perms' | null>(null);
+  const [minimizedPanels, setMinimizedPanels] = useState<Record<string, boolean>>({});
+  const [swapSingleLayout, setSwapSingleLayout] = useState(false);
+  const [swapBulkLayout, setSwapBulkLayout] = useState(false);
+
+  const toggleMinimizePanel = (key: string) => {
+    setMinimizedPanels((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  interface PermissionRow {
+    id: string;
+    perm: string;
+    category: string;
+    label: string;
+    description: string;
+    badge?: string;
+  }
+
+  const allPermissionRows = React.useMemo<PermissionRow[]>(() => {
+    return allPermissions
+      .filter((p) => Boolean(PERMISSION_METADATA[p]))
+      .map((p) => {
+        const meta = PERMISSION_METADATA[p];
+        const category = p.split('.')[0]?.toUpperCase() || 'GENERAL';
+        return {
+          id: p,
+          perm: p,
+          category,
+          label: meta?.label || p,
+          description: meta?.description || '',
+          badge: meta?.badge,
+        };
+      });
+  }, [allPermissions]);
+
+  const permCategories = React.useMemo(
+    () => ['ALL', ...Object.keys(permissionGroups)],
+    [permissionGroups]
+  );
+
+  const filteredSinglePermRows = React.useMemo(
+    () =>
+      permCategoryFilter === 'ALL'
+        ? allPermissionRows
+        : allPermissionRows.filter((r) => r.category === permCategoryFilter),
+    [allPermissionRows, permCategoryFilter]
+  );
+
+  const filteredBulkPermRows = React.useMemo(
+    () =>
+      bulkCategoryFilter === 'ALL'
+        ? allPermissionRows
+        : allPermissionRows.filter((r) => r.category === bulkCategoryFilter),
+    [allPermissionRows, bulkCategoryFilter]
+  );
+
+  const buildPermissionColumns = React.useCallback(
+    (activeMap: Record<string, boolean>): TableColumn<PermissionRow>[] => [
+      {
+        key: 'label',
+        label: 'Permission',
+        render: (_, row) => (
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: row.perm === 'tags.create' ? '#FDE047' : '#F8FAFC',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                }}
+              >
+                {row.label}
+              </Typography>
+              {row.badge && (
+                <Chip
+                  label={row.badge}
+                  size="small"
+                  sx={{
+                    height: 18,
+                    fontSize: '0.62rem',
+                    fontWeight: 800,
+                    bgcolor: 'rgba(250, 204, 21, 0.16)',
+                    color: '#FACC15',
+                  }}
+                />
+              )}
+            </Box>
+          </Box>
+        ),
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        hideOnMobile: true,
+        width: 130,
+        render: (_, row) => (
+          <Chip
+            label={row.category}
+            size="small"
+            sx={{
+              height: 20,
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              bgcolor: 'rgba(56, 189, 248, 0.12)',
+              color: '#38BDF8',
+            }}
+          />
+        ),
+      },
+      {
+        key: 'perm',
+        label: 'Key',
+        hideOnMobile: true,
+        render: (_, row) => (
+          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#94A3B8' }}>
+            {row.perm}
+          </Typography>
+        ),
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        hideOnMobile: true,
+        render: (_, row) => (
+          <Typography variant="caption" sx={{ color: '#94A3B8', lineHeight: 1.35 }}>
+            {row.description || '—'}
+          </Typography>
+        ),
+      },
+      {
+        key: 'granted',
+        label: 'Status',
+        sortable: false,
+        searchable: false,
+        width: 96,
+        align: 'right',
+        render: (_, row) =>
+          activeMap[row.perm] ? (
+            <Chip label="Granted" size="small" color="success" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700 }} />
+          ) : (
+            <Chip label="Denied" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem', color: '#64748B', borderColor: '#334155' }} />
+          ),
+      },
+    ],
+    []
+  );
+
+  const singlePermColumns = React.useMemo(
+    () => buildPermissionColumns(userPerms),
+    [buildPermissionColumns, userPerms]
+  );
+
+  const bulkPermColumns = React.useMemo(
+    () => buildPermissionColumns(bulkPerms),
+    [buildPermissionColumns, bulkPerms]
+  );
+
+  const pickerUserColumns = React.useMemo<TableColumn<AdminUser>[]>(
+    () => [
+      {
+        key: 'name',
+        label: 'User',
+        render: (_, u) => {
+          const isActive = permMatrixUser?.id === u.id;
+          return (
+            <Box>
+              <Typography
+                variant="body2"
+                sx={{ fontWeight: 700, color: isActive ? '#38BDF8' : '#F8FAFC', fontSize: '0.82rem' }}
+              >
+                {u.name || 'Unnamed'}
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.72rem' }}>
+                {u.email}
+              </Typography>
+            </Box>
+          );
+        },
+      },
+      {
+        key: 'role',
+        label: 'Role',
+        hideOnMobile: true,
+        width: 90,
+        render: (_, u) => (
+          <Chip
+            label={String(u.role || 'user').toUpperCase()}
+            size="small"
+            color={u.role === 'admin' ? 'secondary' : 'default'}
+            sx={{ height: 20, fontWeight: 700, fontSize: '0.65rem' }}
+          />
+        ),
+      },
+      {
+        key: 'permissions',
+        label: 'Grants',
+        hideOnMobile: true,
+        sortable: false,
+        searchable: false,
+        width: 80,
+        align: 'right',
+        render: (_, u) => (
+          <Typography variant="caption" sx={{ color: '#38BDF8', fontFamily: 'monospace' }}>
+            {u.role === 'admin' ? 'ALL' : Object.keys(u.permissions || {}).length}
+          </Typography>
+        ),
+      },
+    ],
+    [permMatrixUser]
+  );
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -627,250 +842,276 @@ export const AdminPage: React.FC = () => {
 
       {/* TAB 1: PERMISSION MATRIX FOR SINGLE USER */}
       {activeTab === 1 && (
-        <Card sx={{ bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2, p: { xs: 2, sm: 3 } }}>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              justifyContent: 'space-between',
-              alignItems: { xs: 'flex-start', sm: 'center' },
-              gap: 2,
-              mb: 3,
-            }}
+        <Grid container spacing={2.5} direction={swapSingleLayout ? 'row-reverse' : 'row'}>
+          {/* Left / Top (on mobile): Separate Users Table */}
+          <Grid
+            item
+            xs={12}
+            md={minimizedPanels['single-perms'] ? 12 : minimizedPanels['single-users'] ? 12 : 4}
           >
-            <Box>
-              <Typography variant="h6" sx={{ color: '#F8FAFC', fontWeight: 700 }}>
-                {permMatrixUser
-                  ? `Assign Permissions: ${permMatrixUser.name} (${permMatrixUser.email})`
-                  : 'Select a user to inspect and grant permissions'}
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                Fine-grained RBAC controls enforced at the API gateway and backend authorization dependencies.
-              </Typography>
-            </Box>
-            {permMatrixUser && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                <Button variant="outlined" color="error" size="small" onClick={handleClearUserPerms}>
-                  Revoke All
-                </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  size="small"
-                  onClick={handleSaveUserPerms}
-                  disabled={setPermsMutation.isPending}
-                >
-                  Save Permissions
-                </Button>
-              </Box>
-            )}
-          </Box>
+            <WindowPanel
+              title="Select Operator / User"
+              subtitle="Click any user row to load and edit their permissions."
+              isFullscreen={fullscreenPanel === 'single-users'}
+              onToggleFullscreen={() =>
+                setFullscreenPanel((prev) => (prev === 'single-users' ? null : 'single-users'))
+              }
+              isMinimized={Boolean(minimizedPanels['single-users'])}
+              onToggleMinimize={() => toggleMinimizePanel('single-users')}
+              onSwapPosition={() => setSwapSingleLayout((prev) => !prev)}
+              swapTooltip="Move panel Left / Right"
+            >
+              <Table<AdminUser>
+                columns={pickerUserColumns}
+                data={users}
+                rowKey="id"
+                size="xs"
+                isLoading={usersLoading}
+                emptyMessage="No user accounts found."
+                showSearch={true}
+                searchPlaceholder="Search users..."
+                showPagination={true}
+                itemsPerPage={8}
+                onRowClick={(u) => handleOpenPermMatrix(u)}
+              />
+            </WindowPanel>
+          </Grid>
 
-          {!permMatrixUser ? (
-            <Alert severity="info" sx={{ bgcolor: '#07111D', color: '#94A3B8', border: '1px solid #1E293B' }}>
-              Please select a user from the "User Management" tab or click their permissions chip.
-            </Alert>
-          ) : (
-            <Grid container spacing={3}>
-              {Object.entries(permissionGroups).map(([category, perms]) => (
-                <Grid item xs={12} md={6} lg={4} key={category}>
-                  <Paper
-                    sx={{
-                      p: 2,
-                      bgcolor: '#07111D',
-                      border: '1px solid #1E293B',
-                      borderRadius: 2,
-                      height: '100%',
-                    }}
-                  >
-                    <Typography variant="subtitle2" sx={{ color: '#38BDF8', fontWeight: 700, mb: 1.5 }}>
-                      {category}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {perms.map((perm) => {
-                        const meta = PERMISSION_METADATA[perm];
-                        const isTagsCreate = perm === 'tags.create';
-                        return (
-                          <Box
-                            key={perm}
-                            sx={{
-                              p: 1.25,
-                              borderRadius: 1.5,
-                              border: isTagsCreate ? '1px solid rgba(250, 204, 21, 0.4)' : '1px solid #1E293B',
-                              bgcolor: isTagsCreate ? 'rgba(250, 204, 21, 0.06)' : 'rgba(15, 23, 42, 0.5)',
-                              transition: 'all 0.2s',
-                              '&:hover': {
-                                bgcolor: isTagsCreate ? 'rgba(250, 204, 21, 0.12)' : 'rgba(30, 41, 59, 0.6)',
-                                borderColor: isTagsCreate ? '#FACC15' : '#334155',
-                              },
-                            }}
-                          >
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  checked={Boolean(userPerms[perm])}
-                                  onChange={() => handleTogglePerm(perm)}
-                                  size="small"
-                                  sx={{
-                                    color: isTagsCreate ? '#FACC15' : '#475569',
-                                    '&.Mui-checked': { color: isTagsCreate ? '#FACC15' : '#38BDF8' },
-                                    mt: -0.5,
-                                  }}
-                                />
-                              }
-                              label={
-                                <Box>
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        color: isTagsCreate ? '#FDE047' : '#F8FAFC',
-                                        fontWeight: isTagsCreate ? 800 : 700,
-                                        fontSize: '12.5px',
-                                      }}
-                                    >
-                                      {meta?.label || perm}
-                                    </Typography>
-                                    {meta?.badge && (
-                                      <span className="badge badge-xs bg-yellow-400 text-slate-950 font-bold font-mono">
-                                        {meta.badge}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{ display: 'block', color: isTagsCreate ? '#FEF08A' : '#94A3B8', fontSize: '11px', mt: 0.2, lineHeight: 1.3 }}
-                                  >
-                                    <span className="font-mono text-slate-500 mr-1">({perm})</span>
-                                    {meta?.description || ''}
-                                  </Typography>
-                                </Box>
-                              }
-                              sx={{ m: 0, alignItems: 'flex-start', width: '100%' }}
-                            />
-                          </Box>
-                        );
-                      })}
-                    </Box>
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </Card>
+          {/* Right / Bottom (on mobile): Permissions Table */}
+          <Grid
+            item
+            xs={12}
+            md={minimizedPanels['single-users'] ? 12 : minimizedPanels['single-perms'] ? 12 : 8}
+          >
+            <WindowPanel
+              title={
+                permMatrixUser
+                  ? `Assign Permissions: ${permMatrixUser.name} (${permMatrixUser.email})`
+                  : 'Select a user to inspect and grant permissions'
+              }
+              subtitle="Fine-grained RBAC controls enforced at the API gateway and backend authorization dependencies."
+              isFullscreen={fullscreenPanel === 'single-perms'}
+              onToggleFullscreen={() =>
+                setFullscreenPanel((prev) => (prev === 'single-perms' ? null : 'single-perms'))
+              }
+              isMinimized={Boolean(minimizedPanels['single-perms'])}
+              onToggleMinimize={() => toggleMinimizePanel('single-perms')}
+              onSwapPosition={() => setSwapSingleLayout((prev) => !prev)}
+              swapTooltip="Move panel Left / Right"
+              headerActions={
+                permMatrixUser ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <Button variant="outlined" color="error" size="small" onClick={handleClearUserPerms}>
+                      Revoke All
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                      onClick={handleSaveUserPerms}
+                      disabled={setPermsMutation.isPending}
+                    >
+                      Save Permissions
+                    </Button>
+                  </Box>
+                ) : null
+              }
+            >
+              {!permMatrixUser ? (
+                <Alert severity="info" sx={{ bgcolor: '#07111D', color: '#94A3B8', border: '1px solid #1E293B' }}>
+                  Select a user from the operator table to manage their permissions.
+                </Alert>
+              ) : (
+                <>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                    {permCategories.map((cat) => (
+                      <Chip
+                        key={cat}
+                        label={cat}
+                        size="small"
+                        onClick={() => setPermCategoryFilter(cat)}
+                        color={permCategoryFilter === cat ? 'primary' : 'default'}
+                        variant={permCategoryFilter === cat ? 'filled' : 'outlined'}
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          borderColor: '#334155',
+                          color: permCategoryFilter === cat ? '#0F172A' : '#94A3B8',
+                        }}
+                      />
+                    ))}
+                  </Box>
+
+                  <Table<PermissionRow>
+                    columns={singlePermColumns}
+                    data={filteredSinglePermRows}
+                    rowKey="id"
+                    size="xs"
+                    showCheckbox={true}
+                    selectedRows={filteredSinglePermRows.filter((r) => Boolean(userPerms[r.perm]))}
+                    onRowSelect={(row, checked) =>
+                      setUserPerms((prev) => ({ ...prev, [row.perm]: checked }))
+                    }
+                    onSelectAll={(checked) =>
+                      setUserPerms((prev) => {
+                        const next = { ...prev };
+                        filteredSinglePermRows.forEach((r) => {
+                          next[r.perm] = checked;
+                        });
+                        return next;
+                      })
+                    }
+                    onRowClick={(row) => handleTogglePerm(row.perm)}
+                    showSearch={true}
+                    searchPlaceholder="Search permissions by name, key, or description..."
+                    showPagination={true}
+                    itemsPerPage={fullscreenPanel === 'single-perms' ? 20 : 12}
+                    emptyMessage="No permissions match this filter."
+                  />
+                </>
+              )}
+            </WindowPanel>
+          </Grid>
+        </Grid>
       )}
 
       {/* TAB 2: BULK PERMISSION MATRIX */}
       {activeTab === 2 && (
-        <Card sx={{ bgcolor: '#0B132B', border: '1px solid #1E293B', borderRadius: 2, p: 3 }}>
-          <Typography variant="h6" sx={{ color: '#F8FAFC', fontWeight: 700, mb: 1 }}>
-            Bulk Permission Delegation
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#94A3B8', mb: 3 }}>
-            Select multiple target user accounts and apply a standardized set of permissions simultaneously.
-          </Typography>
-
-          <Grid container spacing={3}>
-            {/* Target Users Column */}
-            <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 2, bgcolor: '#07111D', border: '1px solid #1E293B', borderRadius: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: '#38BDF8', fontWeight: 700, mb: 1.5 }}>
-                  Select Target Users ({bulkSelectedUserIds.length})
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 400, overflowY: 'auto' }}>
-                  {users.map((u) => {
-                    const isSelected = bulkSelectedUserIds.includes(u.id);
-                    return (
-                      <FormControlLabel
-                        key={u.id}
-                        control={
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={() => {
-                              if (isSelected) {
-                                setBulkSelectedUserIds((prev) => prev.filter((id) => id !== u.id));
-                              } else {
-                                setBulkSelectedUserIds((prev) => [...prev, u.id]);
-                              }
-                            }}
-                            size="small"
-                            sx={{ color: '#475569', '&.Mui-checked': { color: '#38BDF8' } }}
-                          />
-                        }
-                        label={
-                          <Typography variant="caption" sx={{ color: '#E2E8F0' }}>
-                            {u.name} ({u.email})
-                          </Typography>
-                        }
-                      />
-                    );
-                  })}
-                </Box>
-              </Paper>
-            </Grid>
-
-            {/* Permissions Column */}
-            <Grid item xs={12} md={8}>
-              <Paper sx={{ p: 2, bgcolor: '#07111D', border: '1px solid #1E293B', borderRadius: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ color: '#38BDF8', fontWeight: 700 }}>
-                    Select Permissions to Assign
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    disabled={bulkSelectedUserIds.length === 0 || bulkPermsMutation.isPending}
-                    onClick={async () => {
-                      const payload = {
-                        all_user_permissions: bulkSelectedUserIds.map((userId) => ({
-                          user_id: userId,
-                          permissions: bulkPerms,
-                        })),
-                      };
-                      await bulkPermsMutation.mutateAsync(payload);
-                    }}
-                  >
-                    Apply Bulk Permissions
-                  </Button>
-                </Box>
-
-                <Grid container spacing={2}>
-                  {Object.entries(permissionGroups).map(([category, perms]) => (
-                    <Grid item xs={12} sm={6} key={category}>
-                      <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700 }}>
-                        {category}
-                      </Typography>
-                      {perms.map((perm) => (
-                        <FormControlLabel
-                          key={perm}
-                          control={
-                            <Checkbox
-                              checked={Boolean(bulkPerms[perm])}
-                              onChange={() =>
-                                setBulkPerms((prev) => ({
-                                  ...prev,
-                                  [perm]: !prev[perm],
-                                }))
-                              }
-                              size="small"
-                              sx={{ color: '#475569', '&.Mui-checked': { color: '#38BDF8' } }}
-                            />
-                          }
-                          label={
-                            <Typography variant="caption" sx={{ color: '#E2E8F0', fontFamily: 'monospace' }}>
-                              {perm}
-                            </Typography>
-                          }
-                          sx={{ display: 'block', m: 0 }}
-                        />
-                      ))}
-                    </Grid>
-                  ))}
-                </Grid>
-              </Paper>
-            </Grid>
+        <Grid container spacing={2.5} direction={swapBulkLayout ? 'row-reverse' : 'row'}>
+          {/* Target Users Table */}
+          <Grid
+            item
+            xs={12}
+            md={minimizedPanels['bulk-perms'] ? 12 : minimizedPanels['bulk-users'] ? 12 : 5}
+          >
+            <WindowPanel
+              title={`Select Target Users (${bulkSelectedUserIds.length})`}
+              subtitle="Choose multiple accounts to receive the selected permission set."
+              isFullscreen={fullscreenPanel === 'bulk-users'}
+              onToggleFullscreen={() =>
+                setFullscreenPanel((prev) => (prev === 'bulk-users' ? null : 'bulk-users'))
+              }
+              isMinimized={Boolean(minimizedPanels['bulk-users'])}
+              onToggleMinimize={() => toggleMinimizePanel('bulk-users')}
+              onSwapPosition={() => setSwapBulkLayout((prev) => !prev)}
+              swapTooltip="Move panel Left / Right"
+            >
+              <Table<AdminUser>
+                columns={pickerUserColumns}
+                data={users}
+                rowKey="id"
+                size="xs"
+                isLoading={usersLoading}
+                showCheckbox={true}
+                selectedRows={users.filter((u) => bulkSelectedUserIds.includes(u.id))}
+                onRowSelect={(u, checked) =>
+                  setBulkSelectedUserIds((prev) =>
+                    checked ? (prev.includes(u.id) ? prev : [...prev, u.id]) : prev.filter((id) => id !== u.id)
+                  )
+                }
+                onSelectAll={(checked) =>
+                  setBulkSelectedUserIds(checked ? users.map((u) => u.id) : [])
+                }
+                onRowClick={(u) =>
+                  setBulkSelectedUserIds((prev) =>
+                    prev.includes(u.id) ? prev.filter((id) => id !== u.id) : [...prev, u.id]
+                  )
+                }
+                showSearch={true}
+                searchPlaceholder="Search target users..."
+                showPagination={true}
+                itemsPerPage={8}
+                emptyMessage="No users available."
+              />
+            </WindowPanel>
           </Grid>
-        </Card>
+
+          {/* Permissions Table */}
+          <Grid
+            item
+            xs={12}
+            md={minimizedPanels['bulk-users'] ? 12 : minimizedPanels['bulk-perms'] ? 12 : 7}
+          >
+            <WindowPanel
+              title="Bulk Permission Delegation"
+              subtitle="Select permissions to apply across all checked target users."
+              isFullscreen={fullscreenPanel === 'bulk-perms'}
+              onToggleFullscreen={() =>
+                setFullscreenPanel((prev) => (prev === 'bulk-perms' ? null : 'bulk-perms'))
+              }
+              isMinimized={Boolean(minimizedPanels['bulk-perms'])}
+              onToggleMinimize={() => toggleMinimizePanel('bulk-perms')}
+              onSwapPosition={() => setSwapBulkLayout((prev) => !prev)}
+              swapTooltip="Move panel Left / Right"
+              headerActions={
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  disabled={bulkSelectedUserIds.length === 0 || bulkPermsMutation.isPending}
+                  onClick={async () => {
+                    const payload = {
+                      all_user_permissions: bulkSelectedUserIds.map((userId) => ({
+                        user_id: userId,
+                        permissions: bulkPerms,
+                      })),
+                    };
+                    await bulkPermsMutation.mutateAsync(payload);
+                  }}
+                >
+                  Apply Bulk ({bulkSelectedUserIds.length} users)
+                </Button>
+              }
+            >
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                {permCategories.map((cat) => (
+                  <Chip
+                    key={cat}
+                    label={cat}
+                    size="small"
+                    onClick={() => setBulkCategoryFilter(cat)}
+                    color={bulkCategoryFilter === cat ? 'primary' : 'default'}
+                    variant={bulkCategoryFilter === cat ? 'filled' : 'outlined'}
+                    sx={{
+                      fontWeight: 700,
+                      fontSize: '0.72rem',
+                      borderColor: '#334155',
+                      color: bulkCategoryFilter === cat ? '#0F172A' : '#94A3B8',
+                    }}
+                  />
+                ))}
+              </Box>
+              <Table<PermissionRow>
+                columns={bulkPermColumns}
+                data={filteredBulkPermRows}
+                rowKey="id"
+                size="xs"
+                showCheckbox={true}
+                selectedRows={filteredBulkPermRows.filter((r) => Boolean(bulkPerms[r.perm]))}
+                onRowSelect={(row, checked) =>
+                  setBulkPerms((prev) => ({ ...prev, [row.perm]: checked }))
+                }
+                onSelectAll={(checked) =>
+                  setBulkPerms((prev) => {
+                    const next = { ...prev };
+                    filteredBulkPermRows.forEach((r) => {
+                      next[r.perm] = checked;
+                    });
+                    return next;
+                  })
+                }
+                onRowClick={(row) =>
+                  setBulkPerms((prev) => ({ ...prev, [row.perm]: !prev[row.perm] }))
+                }
+                showSearch={true}
+                searchPlaceholder="Search permissions..."
+                showPagination={true}
+                itemsPerPage={fullscreenPanel === 'bulk-perms' ? 20 : 12}
+                emptyMessage="No permissions match this filter."
+              />
+            </WindowPanel>
+          </Grid>
+        </Grid>
       )}
 
       {/* EDIT USER DIALOG */}

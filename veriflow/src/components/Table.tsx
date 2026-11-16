@@ -11,6 +11,7 @@ export interface TableColumn<T = any> {
   searchable?: boolean;
   align?: 'left' | 'center' | 'right';
   width?: string | number;
+  hideOnMobile?: boolean;
 }
 
 export interface TableAction<T = any> {
@@ -57,6 +58,7 @@ export interface TableProps<T = any> {
   headerTextClassName?: string;
   rowClassName?: string;
   cellClassName?: string;
+  renderExpandedRow?: (row: T) => React.ReactNode;
 }
 
 // ============================================================================
@@ -94,12 +96,43 @@ export const Table = <T extends Record<string, any>>({
   headerTextClassName = '',
   rowClassName = '',
   cellClassName = '',
+  renderExpandedRow,
 }: TableProps<T>): JSX.Element => {
   // ─── State ──────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<Record<string, boolean>>({});
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  const hiddenMobileColumns = useMemo(
+    () => (isMobile ? columns.filter((col) => col.hideOnMobile) : []),
+    [columns, isMobile]
+  );
+
+  const visibleColumns = useMemo(
+    () => (isMobile ? columns.filter((col) => !col.hideOnMobile) : columns),
+    [columns, isMobile]
+  );
+
+  const hasExpandable = Boolean(renderExpandedRow || hiddenMobileColumns.length > 0);
+
+  const toggleRowExpand = (rowId: string | number) => {
+    const key = String(rowId);
+    setExpandedRowKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // ─── Search ─────────────────────────────────────────────────
   const searchableColumns = useMemo(
@@ -157,13 +190,20 @@ export const Table = <T extends Record<string, any>>({
   // ─── Pagination ─────────────────────────────────────────────
   const totalItems = sortedData.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const safePage = currentPage > totalPages ? 1 : currentPage;
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
 
   const paginatedData = useMemo(() => {
     if (!showPagination) return sortedData;
-    const start = (currentPage - 1) * itemsPerPage;
+    const start = (safePage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     return sortedData.slice(start, end);
-  }, [sortedData, currentPage, itemsPerPage, showPagination]);
+  }, [sortedData, safePage, itemsPerPage, showPagination]);
 
   // ─── Checkbox Helpers ──────────────────────────────────────
   const isRowSelected = (row: T) => {
@@ -484,6 +524,9 @@ export const Table = <T extends Record<string, any>>({
             className={headerClassName}
           >
             <tr>
+              {hasExpandable && (
+                <th style={{ width: 34, textAlign: 'center', padding: cellPadding }} aria-label="Expand row" />
+              )}
               {hasCheckbox && (
                 <th style={{ width: 42, textAlign: 'center', padding: cellPadding }}>
                   <CyberCheckbox
@@ -511,7 +554,7 @@ export const Table = <T extends Record<string, any>>({
                 </th>
               )}
 
-              {columns.map((col) => {
+              {visibleColumns.map((col) => {
                 const isSorted = sortKey === col.key;
                 return (
                   <th
@@ -577,7 +620,8 @@ export const Table = <T extends Record<string, any>>({
               <tr>
                 <td
                   colSpan={
-                    columns.length +
+                    visibleColumns.length +
+                    (hasExpandable ? 1 : 0) +
                     (showRowNumbers ? 1 : 0) +
                     (hasActions ? 1 : 0) +
                     (hasCheckbox ? 1 : 0)
@@ -604,7 +648,8 @@ export const Table = <T extends Record<string, any>>({
               <tr>
                 <td
                   colSpan={
-                    columns.length +
+                    visibleColumns.length +
+                    (hasExpandable ? 1 : 0) +
                     (showRowNumbers ? 1 : 0) +
                     (hasActions ? 1 : 0) +
                     (hasCheckbox ? 1 : 0)
@@ -628,7 +673,14 @@ export const Table = <T extends Record<string, any>>({
             ) : (
               paginatedData.map((row, index) => {
                 const rowId = row[rowKey] ?? index;
-                const globalIndex = (currentPage - 1) * itemsPerPage + index;
+                const isExpanded = Boolean(expandedRowKeys[String(rowId)]);
+                const totalColSpan =
+                  visibleColumns.length +
+                  (hasExpandable ? 1 : 0) +
+                  (showRowNumbers ? 1 : 0) +
+                  (hasActions ? 1 : 0) +
+                  (hasCheckbox ? 1 : 0);
+                const globalIndex = (safePage - 1) * itemsPerPage + index;
                 const isSelected = isRowSelected(row);
                 const isDisabled = checkboxDisabled?.(row) || false;
                 const isEven = index % 2 === 0;
@@ -640,8 +692,8 @@ export const Table = <T extends Record<string, any>>({
                   : 'transparent';
 
                 return (
+                  <React.Fragment key={rowId}>
                   <tr
-                    key={rowId}
                     onClick={() => onRowClick?.(row, globalIndex)}
                     style={{
                       backgroundColor: bg,
@@ -661,6 +713,35 @@ export const Table = <T extends Record<string, any>>({
                     }}
                     className={rowClassName}
                   >
+                    {hasExpandable && (
+                      <td
+                        style={{ textAlign: 'center', padding: cellPadding, width: 34 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRowExpand(rowId);
+                        }}
+                      >
+                        <button
+                          type="button"
+                          aria-label={isExpanded ? 'Collapse row details' : 'Expand row details'}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 6,
+                            border: '1px solid #1E293B',
+                            backgroundColor: isExpanded ? 'rgba(56, 189, 248, 0.16)' : '#07111D',
+                            color: isExpanded ? '#38BDF8' : '#94A3B8',
+                            cursor: 'pointer',
+                            fontSize: '0.68rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                      </td>
+                    )}
                     {hasCheckbox && (
                       <td style={{ textAlign: 'center', padding: cellPadding }} onClick={(e) => e.stopPropagation()}>
                         <CyberCheckbox
@@ -686,7 +767,7 @@ export const Table = <T extends Record<string, any>>({
                       </td>
                     )}
 
-                    {columns.map((col) => (
+                    {visibleColumns.map((col) => (
                       <td
                         key={col.key}
                         style={{
@@ -706,6 +787,43 @@ export const Table = <T extends Record<string, any>>({
                       </td>
                     )}
                   </tr>
+                  {hasExpandable && isExpanded && (
+                    <tr
+                      style={{
+                        backgroundColor: 'rgba(7, 17, 29, 0.85)',
+                        borderBottom: '1px solid rgba(30, 41, 59, 0.7)',
+                      }}
+                    >
+                      <td colSpan={totalColSpan} style={{ padding: '12px 16px' }}>
+                        {renderExpandedRow ? (
+                          renderExpandedRow(row)
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {hiddenMobileColumns.map((col) => (
+                              <div
+                                key={col.key}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 2,
+                                  paddingBottom: 6,
+                                  borderBottom: '1px solid rgba(30, 41, 59, 0.5)',
+                                }}
+                              >
+                                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  {col.label}
+                                </span>
+                                <div style={{ fontSize: '0.82rem', color: '#E2E8F0' }}>
+                                  {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '-')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })
             )}
@@ -719,25 +837,25 @@ export const Table = <T extends Record<string, any>>({
           <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>
             Showing{' '}
             <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
-              {(currentPage - 1) * itemsPerPage + 1}
+              {(safePage - 1) * itemsPerPage + 1}
             </span>{' '}
             -{' '}
             <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
-              {Math.min(currentPage * itemsPerPage, totalItems)}
+              {Math.min(safePage * itemsPerPage, totalItems)}
             </span>{' '}
             of <span style={{ color: '#38BDF8', fontWeight: 700 }}>{totalItems}</span>
           </div>
 
           <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #1E293B', backgroundColor: '#07111D' }}>
             <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
+              onClick={() => handlePageChange(safePage - 1)}
+              disabled={safePage === 1}
               style={{
                 padding: '6px 12px',
                 backgroundColor: 'transparent',
                 border: 'none',
-                color: currentPage === 1 ? '#475569' : '#94A3B8',
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                color: safePage === 1 ? '#475569' : '#94A3B8',
+                cursor: safePage === 1 ? 'not-allowed' : 'pointer',
                 fontSize: '0.82rem',
                 fontWeight: 600,
                 borderRight: '1px solid #1E293B',
@@ -747,11 +865,11 @@ export const Table = <T extends Record<string, any>>({
             </button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
               .map((page, idx, arr) => {
                 const prev = arr[idx - 1];
                 const showEllipsis = prev && page - prev > 1;
-                const isActive = page === currentPage;
+                const isActive = page === safePage;
 
                 return (
                   <React.Fragment key={page}>
@@ -788,14 +906,14 @@ export const Table = <T extends Record<string, any>>({
               })}
 
             <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
+              onClick={() => handlePageChange(safePage + 1)}
+              disabled={safePage === totalPages}
               style={{
                 padding: '6px 12px',
                 backgroundColor: 'transparent',
                 border: 'none',
-                color: currentPage === totalPages ? '#475569' : '#94A3B8',
-                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                color: safePage === totalPages ? '#475569' : '#94A3B8',
+                cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
                 fontSize: '0.82rem',
                 fontWeight: 600,
               }}
