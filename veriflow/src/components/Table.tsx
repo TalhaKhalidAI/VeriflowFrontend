@@ -103,18 +103,31 @@ export const Table = <T extends Record<string, any>>({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [expandedRowKeys, setExpandedRowKeys] = useState<Record<string, boolean>>({});
   const [isMobile, setIsMobile] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 819px)').matches : false
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 767px)');
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      if (typeof window === 'undefined') return;
+      const mq = window.matchMedia('(max-width: 819px)');
+      const update = () => setIsMobile(mq.matches);
+      update();
+      mq.addEventListener('change', update);
+      return () => mq.removeEventListener('change', update);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setIsMobile(entry.contentRect.width < 820);
+      }
+    });
+    observer.observe(el);
+    setIsMobile(el.getBoundingClientRect().width < 820);
+    return () => observer.disconnect();
   }, []);
 
   const hiddenMobileColumns = useMemo(
@@ -343,7 +356,16 @@ export const Table = <T extends Record<string, any>>({
     if (!actions || actions.length === 0) return null;
 
     return (
-      <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+      <div
+        style={{
+          display: 'inline-flex',
+          gap: 6,
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          whiteSpace: isMobile ? 'normal' : 'nowrap',
+        }}
+      >
         {actions.map((action, idx) => {
           if (action.render) {
             return <React.Fragment key={idx}>{action.render(row, index)}</React.Fragment>;
@@ -410,6 +432,7 @@ export const Table = <T extends Record<string, any>>({
   // ─── Render ────────────────────────────────────────────────
   return (
     <div
+      ref={containerRef}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -782,7 +805,7 @@ export const Table = <T extends Record<string, any>>({
                     ))}
 
                     {hasActions && (
-                      <td style={{ textAlign: 'right', padding: cellPadding, whiteSpace: 'nowrap', width: '1%' }} className={cellClassName}>
+                      <td style={{ textAlign: 'right', padding: cellPadding, whiteSpace: isMobile ? 'normal' : 'nowrap', width: isMobile ? 'auto' : '1%' }} className={cellClassName}>
                         {renderActionButtons(row, globalIndex)}
                       </td>
                     )}

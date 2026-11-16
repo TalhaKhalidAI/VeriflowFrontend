@@ -37,6 +37,7 @@ import { useKeysQuery } from '../Keys/query';
 import { useAdminUsersQuery } from '../Admin/query';
 import type { InventoryRule } from './types';
 import { Table, type TableColumn, type TableAction } from '../../components/Table';
+import { DataGridTable, type DataGridColumn } from '../../components/DataGridTable';
 import { ToastMsgs } from '../../api/toastUtils';
 import { useAuthStore } from '../../store/authStore';
 
@@ -467,9 +468,23 @@ export function RulesPage() {
         </Alert>
       )}
 
-      {/* Rules Table */}
-      <Table<InventoryRule>
-        columns={mainRuleColumns}
+      {/* Rules DataGridTable */}
+      <DataGridTable<InventoryRule>
+        columns={
+          mainRuleColumns.map((col, idx) => ({
+            ...col,
+            hideOnMobile: idx >= 2,
+            getValue:
+              col.key === 'is_active'
+                ? (r: InventoryRule) => (r.is_active ? 'ACTIVE' : 'DISABLED')
+                : col.key === 'key_id'
+                  ? (r: InventoryRule) => {
+                      const boundKey = r.key_id ? keyMap.get(r.key_id) : undefined;
+                      return boundKey ? `${boundKey.name} (${boundKey.kid})` : r.key_id || 'GLOBAL (All Keys)';
+                    }
+                  : undefined,
+          })) as DataGridColumn<InventoryRule>[]
+        }
         data={rules}
         rowKey="id"
         isLoading={isLoading}

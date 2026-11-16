@@ -62,7 +62,8 @@ import type {
   ShiftDurationUnit,
   UpdateShiftPayload,
 } from './types';
-import { Table, type TableColumn, type TableAction } from '../../components/Table';
+import { type TableColumn, type TableAction } from '../../components/Table';
+import { DataGridTable, type DataGridColumn } from '../../components/DataGridTable';
 import { useKeysQuery } from '../Keys/query';
 import { useAdminUsersQuery } from '../Admin/query';
 import { ToastMsgs } from '../../api/toastUtils';
@@ -913,9 +914,21 @@ export function ShiftsPage() {
         </Alert>
       )}
 
-      {/* Shifts History Table */}
-      <Table<ShiftRecord>
-        columns={shiftColumns}
+      {/* Shifts History DataGridTable */}
+      <DataGridTable<ShiftRecord>
+        columns={
+          shiftColumns.map((col, idx) => ({
+            ...col,
+            hideOnMobile: idx === 1 || idx === 2 || idx === 4,
+            getValue:
+              col.key === 'user_id'
+                ? (s: ShiftRecord) =>
+                    `${s.user_name || userMap.get(Number(s.user_id))?.name || s.user_email?.split('@')[0] || `User #${s.user_id}`} (#${s.user_id})`
+                : col.key === 'started_at'
+                  ? (s: ShiftRecord) => (s.started_at ? new Date(s.started_at).toLocaleDateString() : 'N/A')
+                  : undefined,
+          })) as DataGridColumn<ShiftRecord>[]
+        }
         data={shifts}
         rowKey="id"
         isLoading={isLoadingShifts}

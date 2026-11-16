@@ -59,7 +59,8 @@ import { ToastMsgs } from '../../api/toastUtils';
 import { http } from '../../api/http/https';
 import { useAuthStore } from '../../store/authStore';
 import { OtpBoxesInput } from '../../components/OtpModal';
-import { Table, type TableColumn, type TableAction } from '../../components/Table';
+import { type TableColumn, type TableAction } from '../../components/Table';
+import { DataGridTable, type DataGridColumn } from '../../components/DataGridTable';
 import { CloseRounded as CloseIcon } from '@mui/icons-material';
 
 export function KeysPage() {
@@ -853,9 +854,14 @@ export function KeysPage() {
         </Alert>
       )}
 
-      {/* Keys Table */}
-      <Table<KeyRecord>
-        columns={keyColumns}
+      {/* Keys DataGridTable */}
+      <DataGridTable<KeyRecord>
+        columns={
+          keyColumns.map((col, idx) => ({
+            ...col,
+            hideOnMobile: idx >= 2,
+          })) as DataGridColumn<KeyRecord>[]
+        }
         data={keys}
         rowKey="id"
         isLoading={isLoading}

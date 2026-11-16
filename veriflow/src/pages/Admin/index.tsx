@@ -477,6 +477,7 @@ export const AdminPage: React.FC = () => {
       key: 'id',
       label: 'ID',
       width: 70,
+      hideOnMobile: true,
       render: (_, u) => (
         <Typography variant="body2" sx={{ color: '#64748B', fontFamily: 'monospace' }}>
           #{u.id}
@@ -500,6 +501,7 @@ export const AdminPage: React.FC = () => {
     {
       key: 'role',
       label: 'Role',
+      hideOnMobile: true,
       render: (_, u) => (
         <Chip
           label={String(u.role || "").toUpperCase()}
@@ -525,6 +527,7 @@ export const AdminPage: React.FC = () => {
     {
       key: 'mfa_enabled',
       label: 'MFA',
+      hideOnMobile: true,
       render: (_, u) => (
         u.mfa_enabled ? (
           <Chip label={u.mfa_method?.toUpperCase() || 'MFA'} size="small" color="info" />
@@ -541,6 +544,7 @@ export const AdminPage: React.FC = () => {
       cols.push({
         key: 'permissions',
         label: 'Permissions',
+        hideOnMobile: true,
         render: (_, u) => {
           const permCount = Object.keys(u.permissions || {}).length;
           return (

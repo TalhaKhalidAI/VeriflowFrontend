@@ -34,7 +34,8 @@ import {
 } from "./query";
 import { useAuthStore } from "../../store/authStore";
 import type { ScanRecord } from "./types";
-import { Table, type TableColumn, type TableAction } from "../../components/Table";
+import { type TableColumn, type TableAction } from "../../components/Table";
+import { DataGridTable, type DataGridColumn } from "../../components/DataGridTable";
 import { ToastMsgs } from "../../api/toastUtils";
 
 export function ScansPage() {
@@ -335,9 +336,21 @@ export function ScansPage() {
         </Alert>
       )}
 
-      {/* Scans Table */}
-      <Table<ScanRecord>
-        columns={scanColumns}
+      {/* Scans DataGridTable */}
+      <DataGridTable<ScanRecord>
+        columns={
+          scanColumns.map((col, idx) => ({
+            ...col,
+            hideOnMobile: idx >= 2,
+            getValue:
+              col.key === "sku"
+                ? (s: ScanRecord) =>
+                    s.jwt_scanned?.sku || s.jwt_scanned?.product_id || s.jwt_scanned?.batch_no || "TAG-PAYLOAD"
+                : col.key === "scanned_at"
+                  ? (s: ScanRecord) => (s.scanned_at ? new Date(s.scanned_at).toLocaleDateString() : "N/A")
+                  : undefined,
+          })) as DataGridColumn<ScanRecord>[]
+        }
         data={scans}
         rowKey="id"
         isLoading={isLoading}
