@@ -180,6 +180,21 @@ export const useDeleteShiftMutation = () => {
   });
 };
 
+export const useClearShiftSqliteMutation = () => {
+  return useMutation({
+    mutationFn: async (shiftId: string) => {
+      return await http.post<{ status: string; shift_id: string; message: string }>(`/shifts/${shiftId}/clear-sqlite`, {});
+    },
+    onSuccess: (res, shiftId) => {
+      const targetId = res?.shift_id || shiftId;
+      ToastMsgs.warning(`Remote SQLite wipe queued for shift ${targetId.slice(0, 8)} (executes on next 3s device sync)`);
+    },
+    onError: (err: any) => {
+      ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to queue remote SQLite wipe');
+    },
+  });
+};
+
 
 export const useUpdateShiftMutation = () => {
   const queryClient = useQueryClient();
