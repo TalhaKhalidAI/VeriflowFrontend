@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import type { ShiftRecord } from '../../Shifts/types';
-import { useDeleteShiftMutation } from '../../Shifts/query';
+import { useDeleteShiftMutation, useClearShiftSqliteMutation } from '../../Shifts/query';
 import type { AdminUser } from '../../Admin/types';
 import { useAuthStore } from '../../../store/authStore';
 
@@ -24,6 +24,14 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
   const canDeleteAnyShift = isAdmin || Boolean(currentUser?.permissions?.['shifts.delete.any']);
   const canDeleteOwnShift = canDeleteAnyShift || Boolean(currentUser?.permissions?.['shifts.delete']);
   const deleteShiftMutation = useDeleteShiftMutation();
+  const clearSqliteMutation = useClearShiftSqliteMutation();
+  const hasSqliteWipePerm =
+    isAdmin ||
+    Boolean(currentUser?.permissions?.['android.data.delete_all']) ||
+    Boolean(currentUser?.permissions?.['user.delete_all_data']);
+  const canClearShiftSqlite = (s: ShiftRecord) =>
+    String(s.status).toLowerCase() === 'active' &&
+    (isAdmin || (hasSqliteWipePerm && Number(s.user_id) === currentUserId));
   const canDeleteShiftRecord = (s: ShiftRecord) =>
     canDeleteAnyShift ||
     (canDeleteOwnShift &&
@@ -653,6 +661,20 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
                       </td>
                       <td className="text-right">
                         <div className="inline-flex items-center gap-1 justify-end">
+                          {canClearShiftSqlite(shift) && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Clear Android SQLite data for shift ${shift.id.slice(0, 8)}?`)) {
+                                  clearSqliteMutation.mutate(shift.id);
+                                }
+                              }}
+                              disabled={clearSqliteMutation.isPending}
+                              title="Queue remote SQLite wipe on Android device"
+                              className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-warning text-amber-400 hover:bg-amber-500/20"
+                            >
+                              Clear SQLite
+                            </button>
+                          )}
                           {canDeleteShiftRecord(shift) && (
                             <button
                               onClick={() => deleteShiftMutation.mutate(shift.id)}

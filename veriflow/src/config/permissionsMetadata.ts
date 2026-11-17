@@ -174,4 +174,22 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
     badge: "ANDROID APP",
     color: "#F59E0B",
   },
+  "android.data.delete_all": {
+    label: "Delete All App SQLite Data (Android)",
+    description: "Allows wiping all local SQLite data (scans, rules, keys) in the VeriFlow Android mobile app",
+    badge: "ANDROID APP",
+    color: "#EF4444",
+  },
+  "android.rules.override": {
+    label: "Override Inventory Rules (Android)",
+    description: "Allow Android operator to override/configure local inventory rules during a shift",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
+  },
+  "android.keys.override": {
+    label: "Override Verification Key (Android)",
+    description: "Allow Android operator to switch verification public keys on the phone during a shift",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
+  },
 };

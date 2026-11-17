@@ -54,6 +54,7 @@ import {
   useUpdateShiftMutation,
   useRestartShiftMutation,
   useRevokeShiftMutation,
+  useClearShiftSqliteMutation,
 } from './query';
 import type {
   StartShiftResponse,
@@ -160,6 +161,7 @@ export function ShiftsPage() {
   const reissueMutation = useReissueActiveShiftMutation();
   const checkoutMutation = useCheckoutShiftMutation();
   const deleteShiftMutation = useDeleteShiftMutation();
+  const clearSqliteMutation = useClearShiftSqliteMutation();
   const updateShiftMutation = useUpdateShiftMutation();
   const restartShiftMutation = useRestartShiftMutation();
   const revokeShiftMutation = useRevokeShiftMutation();
@@ -690,6 +692,38 @@ export function ShiftsPage() {
             sx={{ py: 0.25, px: 1, fontSize: 11 }}
           >
             {allowed ? 'Delete' : !canDeleteOwnShift ? 'Delete 🔒' : 'Admin-Created 🔒'}
+          </Button>
+        );
+      },
+    },
+    {
+      label: 'Clear SQLite',
+      icon: <DeleteIcon sx={{ fontSize: 16 }} />,
+      color: 'warning',
+      disabled: (s: ShiftRecord) => !isAdmin || String(s.status).toLowerCase() !== 'active' || clearSqliteMutation.isPending,
+      onClick: (s: ShiftRecord) => {
+        if (String(s.status).toLowerCase() !== 'active') return;
+        if (window.confirm(`Queue remote SQLite wipe for ${s.user_name || `User #${s.user_id}`} (shift ${s.id.slice(0, 8)})?`)) {
+          clearSqliteMutation.mutate(s.id);
+        }
+      },
+      render: (s: ShiftRecord) => {
+        if (!isAdmin || String(s.status).toLowerCase() !== 'active') return null;
+        return (
+          <Button
+            size="small"
+            variant="outlined"
+            color="warning"
+            disabled={clearSqliteMutation.isPending}
+            onClick={() => {
+              if (window.confirm(`Queue remote SQLite wipe for ${s.user_name || `User #${s.user_id}`} (shift ${s.id.slice(0, 8)})?`)) {
+                clearSqliteMutation.mutate(s.id);
+              }
+            }}
+            title="Clear local SQLite data on this operator's Android device"
+            sx={{ py: 0.25, px: 1, fontSize: 11 }}
+          >
+            Clear SQLite
           </Button>
         );
       },
