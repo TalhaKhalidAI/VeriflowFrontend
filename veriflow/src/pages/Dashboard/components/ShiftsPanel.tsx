@@ -460,25 +460,22 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
           <div className="join flex flex-wrap gap-1">
             <button
               onClick={() => setViewTab('tabular')}
-              className={`join-item btn btn-xs font-mono transition-all ${
-                viewTab === 'tabular' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
-              }`}
+              className={`join-item btn btn-xs font-mono transition-all ${viewTab === 'tabular' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
+                }`}
             >
               📋 Tabular Grid
             </button>
             <button
               onClick={() => setViewTab('step_line')}
-              className={`join-item btn btn-xs font-mono transition-all ${
-                viewTab === 'step_line' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
-              }`}
+              className={`join-item btn btn-xs font-mono transition-all ${viewTab === 'step_line' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
+                }`}
             >
               📈 Step Line Chart
             </button>
             <button
               onClick={() => setViewTab('horizontal_bar')}
-              className={`join-item btn btn-xs font-mono transition-all ${
-                viewTab === 'horizontal_bar' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
-              }`}
+              className={`join-item btn btn-xs font-mono transition-all ${viewTab === 'horizontal_bar' ? 'btn-warning font-bold text-slate-900' : 'btn-ghost text-slate-300'
+                }`}
             >
               📊 Horizontal Bar Chart
             </button>
@@ -577,130 +574,130 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1E293B]/70 text-[11px] font-mono">
-                {filteredShifts.map((shift) => {
-                  const user = userMap.get(shift.user_id);
-                  const isActive = shift.status === 'active';
-                  const isEnded = shift.status === 'ended' || Boolean(shift.ended_at);
+                  {filteredShifts.map((shift) => {
+                    const user = userMap.get(shift.user_id);
+                    const isActive = shift.status === 'active';
+                    const isEnded = shift.status === 'ended' || Boolean(shift.ended_at);
 
-                  return (
-                    <tr key={shift.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded bg-[#FACC15]/20 text-[#FACC15] flex items-center justify-center font-bold text-[10px]">
-                            {(user?.name || 'U')[0].toUpperCase()}
+                    return (
+                      <tr key={shift.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded bg-[#FACC15]/20 text-[#FACC15] flex items-center justify-center font-bold text-[10px]">
+                              {(user?.name || 'U')[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white">{user?.name || `User #${shift.user_id}`}</div>
+                              <div className="text-[10px] text-slate-500">ID #{shift.user_id}</div>
+                            </div>
                           </div>
+                        </td>
+                        <td>
+                          <span className="badge badge-xs badge-neutral font-mono text-[9px] px-1.5">
+                            {shift.device_id || 'STATION-01'}
+                          </span>
+                        </td>
+                        <td>
                           <div>
-                            <div className="font-bold text-white">{user?.name || `User #${shift.user_id}`}</div>
-                            <div className="text-[10px] text-slate-500">ID #{shift.user_id}</div>
+                            {shift.started_at ? (
+                              <>
+                                <div className="text-slate-300">
+                                  {new Date(shift.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {new Date(shift.started_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                </div>
+                              </>
+                            ) : (
+                              'N/A'
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge badge-xs badge-neutral font-mono text-[9px] px-1.5">
-                          {shift.device_id || 'STATION-01'}
-                        </span>
-                      </td>
-                      <td>
-                        <div>
-                          {shift.started_at ? (
-                            <>
-                              <div className="text-slate-300">
-                                {new Date(shift.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                              <div className="text-[10px] text-slate-500">
-                                {new Date(shift.started_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                              </div>
-                            </>
-                          ) : (
-                            'N/A'
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div>
-                          {shift.ended_at ? (
-                            <>
-                              <div className="text-slate-300">
-                                {new Date(shift.ended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                              <div className="text-[10px] text-slate-500">
-                                {new Date(shift.ended_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                              </div>
-                            </>
-                          ) : isActive ? (
-                            <span className="text-emerald-400 font-bold">Open Session</span>
-                          ) : shift.expires_at ? (
-                            <span className="text-slate-500">
-                              Exp {new Date(shift.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td>
+                          <div>
+                            {shift.ended_at ? (
+                              <>
+                                <div className="text-slate-300">
+                                  {new Date(shift.ended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {new Date(shift.ended_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                </div>
+                              </>
+                            ) : isActive ? (
+                              <span className="text-emerald-400 font-bold">Open Session</span>
+                            ) : shift.expires_at ? (
+                              <span className="text-slate-500">
+                                Exp {new Date(shift.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            ) : (
+                              'N/A'
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="font-bold text-yellow-400">
+                            {calculateDuration(shift.started_at, shift.ended_at, shift.status)}
+                          </span>
+                        </td>
+                        <td>
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-bold text-[10px]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              ACTIVE
+                            </span>
+                          ) : isEnded ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 font-bold text-[10px]">
+                              CHECKED OUT
                             </span>
                           ) : (
-                            'N/A'
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-700/40 border border-slate-600 text-slate-400 font-medium text-[10px]">
+                              {String(shift?.status || "").toUpperCase()}
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td>
-                        <span className="font-bold text-yellow-400">
-                          {calculateDuration(shift.started_at, shift.ended_at, shift.status)}
-                        </span>
-                      </td>
-                      <td>
-                        {isActive ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-bold text-[10px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            ACTIVE
-                          </span>
-                        ) : isEnded ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 font-bold text-[10px]">
-                            CHECKED OUT
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-700/40 border border-slate-600 text-slate-400 font-medium text-[10px]">
-                            {String(shift?.status || "").toUpperCase()}
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-right">
-                        <div className="inline-flex items-center gap-1 justify-end">
-                          {canClearShiftSqlite(shift) && (
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Clear Android SQLite data for shift ${shift.id.slice(0, 8)}?`)) {
-                                  clearSqliteMutation.mutate(shift.id);
-                                }
-                              }}
-                              disabled={clearSqliteMutation.isPending}
-                              title="Queue remote SQLite wipe on Android device"
-                              className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-warning text-amber-400 hover:bg-amber-500/20"
-                            >
-                              Clear SQLite
-                            </button>
-                          )}
-                          {canDeleteShiftRecord(shift) && (
-                            <button
-                              onClick={() => deleteShiftMutation.mutate(shift.id)}
-                              disabled={deleteShiftMutation.isPending}
-                              title="Permanently delete this shift"
-                              className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-error text-red-400 hover:bg-red-500/20"
-                            >
-                              🗑 Delete
-                            </button>
-                          )}
-                          {canInspectShiftsPage && (
-                            <button
-                              onClick={() => navigate('/shifts')}
-                              className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
-                            >
-                              Inspect →
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                        </td>
+                        <td className="text-right">
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            {canClearShiftSqlite(shift) && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Clear Android SQLite data for shift ${shift.id.slice(0, 8)}?`)) {
+                                    clearSqliteMutation.mutate(shift.id);
+                                  }
+                                }}
+                                disabled={clearSqliteMutation.isPending}
+                                title="Queue remote SQLite wipe on Android device"
+                                className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-warning text-amber-400 hover:bg-amber-500/20"
+                              >
+                                Clear SQLite
+                              </button>
+                            )}
+                            {canDeleteShiftRecord(shift) && (
+                              <button
+                                onClick={() => deleteShiftMutation.mutate(shift.id)}
+                                disabled={deleteShiftMutation.isPending}
+                                title="Permanently delete this shift"
+                                className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-error text-red-400 hover:bg-red-500/20"
+                              >
+                                🗑 Delete
+                              </button>
+                            )}
+                            {canInspectShiftsPage && (
+                              <button
+                                onClick={() => navigate('/shifts')}
+                                className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
+                              >
+                                Inspect →
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
           {/* Internal Scroll Footer Indicator */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#07111D] border-t border-[#1E293B] text-[10px] font-mono text-slate-400">
