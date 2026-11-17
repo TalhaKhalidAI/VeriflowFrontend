@@ -1864,7 +1864,7 @@ export const AdminPage: React.FC = () => {
         </DialogTitle>
         <DialogContent sx={{ bgcolor: '#0B132B', pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: '#94A3B8', mt: 1 }}>
-            Confirm {actionDialog.type} for <strong>{actionDialog.user?.username || actionDialog.user?.email}</strong>.
+            Confirm {actionDialog.type} for <strong>{actionDialog.user?.name || actionDialog.user?.email}</strong>.
           </Typography>
           {actionDialog.type !== 'restore' && (
             <TextField
