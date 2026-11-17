@@ -635,6 +635,10 @@ export const AdminPage: React.FC = () => {
             >
               {`${permCount} grants`}
             </Button>
+          ) : (
+            <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+              {u.role === 'admin' ? 'Admin Full Access' : `${permCount} grants`}
+            </Typography>
           );
         },
       });
