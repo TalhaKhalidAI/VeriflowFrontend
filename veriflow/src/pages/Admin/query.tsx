@@ -47,8 +47,7 @@ export const useAdminUsersQuery = (options: UserQueryOptions & { enabled?: boole
         const canViewPerms =
           isAdmin ||
           Boolean(user?.permissions?.['admin.users.view']) ||
-          Boolean(user?.permissions?.['admin.access']) ||
-          Boolean(user?.permissions?.['admin.users']);
+          Boolean(user?.permissions?.['admin.access']);
         if (show_permissions && canViewPerms) {
           try {
             const permData = await http.get<{
@@ -75,6 +74,7 @@ export const useAdminUsersQuery = (options: UserQueryOptions & { enabled?: boole
               permissions: show_permissions ? (u.permissions || pInfo.permissions || {}) : {},
               mfa_enabled: Boolean(u.mfa_enabled),
               mfa_method: u.mfa_method,
+              managed_by_id: u.managed_by_id ?? null,
             };
           });
         }
@@ -139,8 +139,7 @@ export const useAllPermissionsQuery = (enabled?: boolean) => {
     isAdmin ||
     Boolean(user?.permissions?.['admin.users.view']) ||
     Boolean(user?.permissions?.['user.view.any']) ||
-    Boolean(user?.permissions?.['admin.access']) ||
-    Boolean(user?.permissions?.['admin.users']);
+    Boolean(user?.permissions?.['admin.access']);
   const canManageSelf =
     Boolean(user?.permissions?.['user.view.self']) ||
     Boolean(user?.permissions?.['user.update.self']) ||
@@ -344,6 +343,22 @@ export const useRemovePermissionsMutation = () => {
     },
     onError: (err: any) => {
       ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to remove permissions');
+    },
+  });
+};
+
+export const useSetManagedUsersMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ managerId, userIds }: { managerId: number; userIds: number[] }) => {
+      return await http.post(`/admin/admin_access/manager/${managerId}/assigned-users`, { user_ids: userIds });
+    },
+    onSuccess: (_, vars) => {
+      ToastMsgs.success(`Updated managed users for User #${vars.managerId}`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], refetchType: 'active' });
+    },
+    onError: (err: any) => {
+      ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to update managed users');
     },
   });
 };

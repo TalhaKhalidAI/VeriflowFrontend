@@ -11,7 +11,7 @@ import {
 } from '@mui/icons-material';
 import ReactECharts from 'echarts-for-react';
 import { useDashboardOverviewQuery } from './query';
-import { useActiveShiftQuery, useShiftsQuery } from '../Shifts/query';
+import { useActiveShiftQuery, useDashboardShiftsStatsQuery } from '../Shifts/query';
 import { useAdminUsersQuery } from '../Admin/query';
 import { useRulesQuery } from '../Rules/query';
 import { useAuthStore } from '../../store/authStore';
@@ -33,18 +33,22 @@ export function DashboardPage() {
   const canScans = usePermission('scans').allowed;
   const isAdmin = useIsAdmin();
 
+  const canViewAllShiftStats =
+    isAdmin ||
+    Boolean(user?.permissions?.['shifts.view.any']) ||
+    Boolean(user?.permissions?.['shifts.stats.view.any']);
+  const canViewDashboardShifts = canShifts || canViewAllShiftStats;
+
   const { data: stats, isLoading } = useDashboardOverviewQuery();
   const { data: activeShift, isLoading: isLoadingShift } = useActiveShiftQuery();
-  const { data: shiftsData } = useShiftsQuery({ enabled: canShifts });
-  const { data: usersData } = useAdminUsersQuery({ enabled: isAdmin });
+  const { data: shiftsData } = useDashboardShiftsStatsQuery({ enabled: canViewDashboardShifts });
+  const { data: usersData } = useAdminUsersQuery({ enabled: isAdmin || canViewAllShiftStats });
   const { data: rulesData } = useRulesQuery({ enabled: canRules });
 
-  const canViewOtherShifts =
-    isAdmin ||
-    Boolean(user?.permissions?.['shifts.view.any']);
+  const canViewOtherShifts = canViewAllShiftStats;
   const canViewOtherRules = isAdmin;
 
-  // If user has shifts.view permission (or admin), they can view all shifts telemetry; else strictly only their own
+  // If user has shifts.view.any or shifts.stats.view.any (or admin), show all shifts telemetry; else strictly only their own
   const userShifts = useMemo(() => {
     const items = Array.isArray(shiftsData?.items) ? shiftsData.items : [];
     if (canViewOtherShifts) return items;
@@ -55,7 +59,7 @@ export function DashboardPage() {
   // Only permit tabs the user actually has authorization to view
   const availableTabs = useMemo(() => {
     const tabs: { id: AnalyticsTab; label: string }[] = [];
-    if (canShifts) {
+    if (canViewDashboardShifts) {
       tabs.push({ id: 'attendance', label: '⏱ Attendance (Day/Hr/Min)' });
       tabs.push({ id: 'shifts', label: '📑 Shift Checkouts' });
     }
@@ -63,10 +67,10 @@ export function DashboardPage() {
       tabs.push({ id: 'rules', label: '⚡ Rules Matrix' });
     }
     return tabs;
-  }, [canShifts, canRules]);
+  }, [canViewDashboardShifts, canRules]);
 
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<AnalyticsTab>(() => {
-    if (canShifts) return 'attendance';
+    if (canViewDashboardShifts) return 'attendance';
     if (canRules) return 'rules';
     return 'attendance';
   });
@@ -462,25 +466,27 @@ export function DashboardPage() {
       )}
 
       {/* Real-time Telemetry Chart */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl p-5 md:p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-base md:text-lg font-bold text-white font-mono flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              REAL-TIME SCAN VERIFICATION FLOW
-            </h2>
-            <p className="text-slate-400 text-xs">
-              Live rate of valid cryptographically signed scans vs offline policy violations
-            </p>
+      {canScans && (
+        <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl p-5 md:p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-base md:text-lg font-bold text-white font-mono flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                REAL-TIME SCAN VERIFICATION FLOW
+              </h2>
+              <p className="text-slate-400 text-xs">
+                Live rate of valid cryptographically signed scans vs offline policy violations
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="badge badge-sm badge-success font-mono font-bold">LIVE TELEMETRY</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="badge badge-sm badge-success font-mono font-bold">LIVE TELEMETRY</span>
+          <div className="h-72 w-full">
+            <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
           </div>
         </div>
-        <div className="h-72 w-full">
-          <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
-        </div>
-      </div>
+      )}
 
       {/* Industrial Security Action Shortcuts: Only show permitted actions */}
       {hasAnyAction && (

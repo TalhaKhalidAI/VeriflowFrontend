@@ -32,6 +32,11 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
       Number(s.created_by) === currentUserId);
   const canViewOthers =
     isAdmin ||
+    Boolean(currentUser?.permissions?.['shifts.view.any']) ||
+    Boolean(currentUser?.permissions?.['shifts.stats.view.any']);
+  const canInspectShiftsPage =
+    isAdmin ||
+    Boolean(currentUser?.permissions?.['shifts.view']) ||
     Boolean(currentUser?.permissions?.['shifts.view.any']);
   const [viewTab, setViewTab] = useState<ViewTab>('tabular');
   const [filterMode, setFilterMode] = useState<FilterMode>('time');
@@ -648,33 +653,24 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
                       </td>
                       <td className="text-right">
                         <div className="inline-flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => {
-                              if (!canDeleteShiftRecord(shift)) return;
-                              deleteShiftMutation.mutate(shift.id);
-                            }}
-                            disabled={!canDeleteShiftRecord(shift) || deleteShiftMutation.isPending}
-                            title={
-                              canDeleteShiftRecord(shift)
-                                ? 'Permanently delete this shift'
-                                : !canDeleteOwnShift
-                                ? "Requires 'shifts.delete' permission"
-                                : 'Cannot delete: only shifts you created yourself can be deleted'
-                            }
-                            className={`btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 ${
-                              canDeleteShiftRecord(shift)
-                                ? 'btn-outline btn-error text-red-400 hover:bg-red-500/20'
-                                : 'btn-disabled opacity-40'
-                            }`}
-                          >
-                            {canDeleteShiftRecord(shift) ? '🗑 Delete' : '🔒 Delete'}
-                          </button>
-                          <button
-                            onClick={() => navigate('/shifts')}
-                            className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
-                          >
-                            Inspect →
-                          </button>
+                          {canDeleteShiftRecord(shift) && (
+                            <button
+                              onClick={() => deleteShiftMutation.mutate(shift.id)}
+                              disabled={deleteShiftMutation.isPending}
+                              title="Permanently delete this shift"
+                              className="btn btn-xs font-mono h-6 min-h-0 text-[10px] px-2 btn-outline btn-error text-red-400 hover:bg-red-500/20"
+                            >
+                              🗑 Delete
+                            </button>
+                          )}
+                          {canInspectShiftsPage && (
+                            <button
+                              onClick={() => navigate('/shifts')}
+                              className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
+                            >
+                              Inspect →
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

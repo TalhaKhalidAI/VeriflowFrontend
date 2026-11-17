@@ -34,11 +34,9 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
   "admin.users.disable": { label: "Admin Disable Users", description: "Disable any account without password challenge" },
   "admin.users.delete": { label: "Admin Delete Users", description: "Soft-delete accounts with admin authority" },
   "admin.users.restore": { label: "Admin Restore Users", description: "Recover deleted accounts with admin override" },
-  "admin.users.promote": { label: "Admin Manage RBAC", description: "Delegate and manage all permissions" },
-  "admin.users": { label: "Admin User Management", description: "Broad user administration authority" },
-  "admin.settings.view": { label: "View System Settings", description: "Inspect backend parameters and telemetry" },
-  "admin.settings.update": { label: "Update System Settings", description: "Modify global timeout and rate-limit parameters" },
-  "admin.view_all": { label: "Super View All Entity Records", description: "Unrestricted tenancy and record visibility" },
+  "admin.users.promote": { label: "Admin Manage RBAC", description: "Manage permissions for assigned users (cannot pass RBAC authority without admin.rbac.delegate)" },
+  "admin.rbac.delegate": { label: "Delegate RBAC Authority", description: "Allow passing RBAC management permissions (admin.users.promote / user.promote) to assigned users", badge: "RBAC DELEGATION", color: "#F59E0B" },
+  "admin.rbac.android": { label: "Manage Android Permissions (RBAC)", description: "Allow delegated RBAC managers to grant or revoke ANDROID app permissions (android.*) for assigned users", badge: "ANDROID RBAC", color: "#38BDF8" },
   "admin.system.kill_switch": { label: "Reset Safety Mode", description: "Disengage auto-kill switch lock" },
 
   // KEYS
@@ -52,6 +50,7 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
   // SHIFTS
   "shifts.view": { label: "View Own Shifts", description: "Access shift management interface and view own shift logs" },
   "shifts.view.any": { label: "View Any Operator Shift", description: "Supervisor view of all operator shifts" },
+  "shifts.stats.view.any": { label: "View All Users Shift Stats (Dashboard)", description: "View all operators' shift analytics and checkout stats on the Dashboard", badge: "DASHBOARD", color: "#38BDF8" },
   "shifts.create": { label: "Start Active Work Shift", description: "Initialize shift and generate RS256 token" },
   "shifts.restart": { label: "Restart Own Shifts", description: "Restart own self-created shifts with the same configuration" },
   "shifts.restart.any": { label: "Restart Any Operator Shift", description: "Restart any shift (including admin-created or other users' shifts)", badge: "ADMIN SCOPE", color: "#10B981" },
@@ -82,5 +81,97 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
     description: "Allows generating RS256-signed QR code tags with custom payload and fitted dimensions",
     badge: "QR ENGINE",
     color: "#FACC15",
+  },
+
+  // ANDROID MOBILE APP
+  "android.keys.view": {
+    label: "View Public Keys (Android)",
+    description: "View stored RSA verification public keys in the Android app",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.keys.create": {
+    label: "Import / Scan Public Keys (Android)",
+    description: "Allow adding, importing, or QR-scanning public keys in the Android app",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.keys.update": {
+    label: "Update Public Keys (Android)",
+    description: "Allow editing or updating stored public keys in the Android app",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
+  },
+  "android.keys.revoke": {
+    label: "Revoke Public Keys (Android)",
+    description: "Allow revoking/removing stored public keys in the Android app",
+    badge: "ANDROID APP",
+    color: "#EF4444",
+  },
+  "android.keys.delete": {
+    label: "Delete Public Keys (Android)",
+    description: "Allow deleting stored public keys in the Android app",
+    badge: "ANDROID APP",
+    color: "#EF4444",
+  },
+  "android.inventory_rules.view": {
+    label: "View Inventory Rules (Android)",
+    description: "View local inventory validation rules in the Android app",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.inventory_rules.create": {
+    label: "Create Inventory Rules (Android)",
+    description: "Create local inventory validation rules in the Android app",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.inventory_rules.update": {
+    label: "Update Inventory Rules (Android)",
+    description: "Edit local inventory validation rules in the Android app",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
+  },
+  "android.inventory_rules.delete": {
+    label: "Delete Inventory Rules (Android)",
+    description: "Delete local inventory validation rules in the Android app",
+    badge: "ANDROID APP",
+    color: "#EF4444",
+  },
+  "android.scans.view.any": {
+    label: "View Any Scan Log (Android)",
+    description: "View all operators' scan logs stored on the Android device",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.scans.view.own": {
+    label: "View Own Scans (Android)",
+    description: "View own scan history in the Android app",
+    badge: "ANDROID APP",
+    color: "#38BDF8",
+  },
+  "android.scans.create": {
+    label: "QR Tag Scanning (Android)",
+    description: "Allow scanning Product QR Tags in the Android app (enabled by default unless explicitly denied)",
+    badge: "ANDROID APP",
+    color: "#22C55E",
+  },
+  "android.scans.update": {
+    label: "Update Scan Records (Android)",
+    description: "Update/annotate local scan logs in the Android app",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
+  },
+  "android.scans.delete": {
+    label: "Delete Scan Records (Android)",
+    description: "Delete local scan logs in the Android app",
+    badge: "ANDROID APP",
+    color: "#EF4444",
+  },
+  "android.config.update": {
+    label: "Update Android App Config",
+    description: "Allow updating Server API URL, Key Sync Interval, and Root CA Certificate in the Android app",
+    badge: "ANDROID APP",
+    color: "#F59E0B",
   },
 };
