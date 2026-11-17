@@ -227,14 +227,7 @@ export const AdminPage: React.FC = () => {
     setActionDialog({ open: true, type, user: targetUser });
   };
 
-  const handleSendActionOtp = async () => {
-    const purposeMap: Record<'disable' | 'enable' | 'delete' | 'restore', string> = {
-      disable: 'disable_account',
-      enable: 'enable_account',
-      restore: 'restore_account',
-      delete: 'mfa_stepup',
-    };
-    const purpose = purposeMap[actionDialog.type];
+  const sendAdminMfaCode = async (purpose: string) => {
     setSendingActionOtp(true);
     try {
       await http.post(`/mfa/send_genaric_otp?purpose=${encodeURIComponent(purpose)}`);
@@ -244,6 +237,16 @@ export const AdminPage: React.FC = () => {
     } finally {
       setSendingActionOtp(false);
     }
+  };
+
+  const handleSendActionOtp = async () => {
+    const purposeMap: Record<'disable' | 'enable' | 'delete' | 'restore', string> = {
+      disable: 'disable_account',
+      enable: 'enable_account',
+      restore: 'restore_account',
+      delete: 'mfa_stepup',
+    };
+    await sendAdminMfaCode(purposeMap[actionDialog.type]);
   };
 
   const handleConfirmAction = async () => {
@@ -584,71 +587,71 @@ export const AdminPage: React.FC = () => {
 
   const userColumns: TableColumn<AdminUser>[] = React.useMemo(() => {
     const cols: TableColumn<AdminUser>[] = [
-    {
-      key: 'id',
-      label: 'ID',
-      width: 70,
-      hideOnMobile: true,
-      render: (_, u) => (
-        <Typography variant="body2" sx={{ color: '#64748B', fontFamily: 'monospace' }}>
-          #{u.id}
-        </Typography>
-      ),
-    },
-    {
-      key: 'name',
-      label: 'User / Email',
-      render: (_, u) => (
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: '#F8FAFC' }}>
-            {u.name || 'Unnamed'}
+      {
+        key: 'id',
+        label: 'ID',
+        width: 70,
+        hideOnMobile: true,
+        render: (_, u) => (
+          <Typography variant="body2" sx={{ color: '#64748B', fontFamily: 'monospace' }}>
+            #{u.id}
           </Typography>
-          <Typography variant="caption" sx={{ color: '#94A3B8' }}>
-            {u.email}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      key: 'role',
-      label: 'Role',
-      hideOnMobile: true,
-      render: (_, u) => (
-        <Chip
-          label={String(u.role || "").toUpperCase()}
-          size="small"
-          color={u.role === 'admin' ? 'secondary' : 'default'}
-          sx={{ fontWeight: 700, fontSize: 11 }}
-        />
-      ),
-    },
-    {
-      key: 'disabled',
-      label: 'Status',
-      render: (_, u) => (
-        u.is_deleted ? (
-          <Chip label="Deleted" size="small" color="error" />
-        ) : u.disabled ? (
-          <Chip label="Disabled" size="small" color="warning" />
-        ) : (
-          <Chip label="Active" size="small" color="success" />
-        )
-      ),
-    },
-    {
-      key: 'mfa_enabled',
-      label: 'MFA',
-      hideOnMobile: true,
-      render: (_, u) => (
-        u.mfa_enabled ? (
-          <Chip label={u.mfa_method?.toUpperCase() || 'MFA'} size="small" color="info" />
-        ) : (
-          <Typography variant="caption" sx={{ color: '#64748B' }}>
-            None
-          </Typography>
-        )
-      ),
-    },
+        ),
+      },
+      {
+        key: 'name',
+        label: 'User / Email',
+        render: (_, u) => (
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#F8FAFC' }}>
+              {u.name || 'Unnamed'}
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+              {u.email}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        key: 'role',
+        label: 'Role',
+        hideOnMobile: true,
+        render: (_, u) => (
+          <Chip
+            label={String(u.role || "").toUpperCase()}
+            size="small"
+            color={u.role === 'admin' ? 'secondary' : 'default'}
+            sx={{ fontWeight: 700, fontSize: 11 }}
+          />
+        ),
+      },
+      {
+        key: 'disabled',
+        label: 'Status',
+        render: (_, u) => (
+          u.is_deleted ? (
+            <Chip label="Deleted" size="small" color="error" />
+          ) : u.disabled ? (
+            <Chip label="Disabled" size="small" color="warning" />
+          ) : (
+            <Chip label="Active" size="small" color="success" />
+          )
+        ),
+      },
+      {
+        key: 'mfa_enabled',
+        label: 'MFA',
+        hideOnMobile: true,
+        render: (_, u) => (
+          u.mfa_enabled ? (
+            <Chip label={u.mfa_method?.toUpperCase() || 'MFA'} size="small" color="info" />
+          ) : (
+            <Typography variant="caption" sx={{ color: '#64748B' }}>
+              None
+            </Typography>
+          )
+        ),
+      },
     ];
 
     if (showPermissions) {
@@ -883,6 +886,9 @@ export const AdminPage: React.FC = () => {
             iconPosition="start"
           />
           <Tab label="Bulk Permission Matrix" icon={<Lock fontSize="small" />} iconPosition="start" />
+          {canDelegateAndroidPerms && (
+            <Tab label="ANDROID RBAC" icon={<ShieldAlert fontSize="small" />} iconPosition="start" />
+          )}
         </Tabs>
       </Box>
 
@@ -1324,6 +1330,136 @@ export const AdminPage: React.FC = () => {
         </Grid>
       )}
 
+      {/* TAB 3: ANDROID RBAC */}
+      {activeTab === 3 && canDelegateAndroidPerms && (() => {
+        const androidPermRows = allPermissionRows.filter((r) => r.perm.startsWith('android.'));
+        return (
+          <Grid container spacing={2.5} direction={swapSingleLayout ? 'row-reverse' : 'row'}>
+            <Grid
+              item
+              xs={12}
+              md={minimizedPanels['single-perms'] ? 12 : minimizedPanels['single-users'] ? 12 : 4}
+            >
+              <WindowPanel
+                title="Select Operator / User"
+                subtitle="Click any user row to manage their Android app permissions."
+                isFullscreen={fullscreenPanel === 'single-users'}
+                onToggleFullscreen={() =>
+                  setFullscreenPanel((prev) => (prev === 'single-users' ? null : 'single-users'))
+                }
+                isMinimized={Boolean(minimizedPanels['single-users'])}
+                onToggleMinimize={() => toggleMinimizePanel('single-users')}
+                onSwapPosition={() => setSwapSingleLayout((prev) => !prev)}
+                swapTooltip="Move panel Left / Right"
+              >
+                <Table<AdminUser>
+                  columns={pickerUserColumns}
+                  data={manageableRbacUsers}
+                  rowKey="id"
+                  size="xs"
+                  isLoading={usersLoading}
+                  emptyMessage={isSelfAdmin ? 'No non-admin user accounts found.' : 'No users assigned to you for RBAC delegation.'}
+                  showSearch={true}
+                  searchPlaceholder="Search users..."
+                  showPagination={true}
+                  itemsPerPage={8}
+                  onRowClick={(u) => {
+                    setPermMatrixUser(u);
+                    setUserPerms(filterValidPerms(u.permissions));
+                  }}
+                />
+              </WindowPanel>
+            </Grid>
+            <Grid
+              item
+              xs={12}
+              md={minimizedPanels['single-users'] ? 12 : minimizedPanels['single-perms'] ? 12 : 8}
+            >
+              <WindowPanel
+                title={
+                  permMatrixUser
+                    ? `Android RBAC: ${permMatrixUser.name} (${permMatrixUser.email})`
+                    : 'Select a user to manage Android RBAC'
+                }
+                subtitle="Controls android.* mobile app permissions for the selected operator."
+                isFullscreen={fullscreenPanel === 'single-perms'}
+                onToggleFullscreen={() =>
+                  setFullscreenPanel((prev) => (prev === 'single-perms' ? null : 'single-perms'))
+                }
+                isMinimized={Boolean(minimizedPanels['single-perms'])}
+                onToggleMinimize={() => toggleMinimizePanel('single-perms')}
+                onSwapPosition={() => setSwapSingleLayout((prev) => !prev)}
+                swapTooltip="Move panel Left / Right"
+                headerActions={
+                  permMatrixUser ? (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={() =>
+                          setUserPerms((prev) => {
+                            const next = { ...prev };
+                            androidPermRows.forEach((r) => {
+                              next[r.perm] = false;
+                            });
+                            return next;
+                          })
+                        }
+                      >
+                        Clear Android Perms
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        onClick={handleSaveUserPerms}
+                        disabled={setPermsMutation.isPending}
+                      >
+                        Save Permissions
+                      </Button>
+                    </Box>
+                  ) : null
+                }
+              >
+                {!permMatrixUser ? (
+                  <Alert severity="info" sx={{ bgcolor: '#07111D', color: '#94A3B8', border: '1px solid #1E293B' }}>
+                    Select a user from the operator table to manage their Android app permissions.
+                  </Alert>
+                ) : (
+                  <Table<PermissionRow>
+                    columns={singlePermColumns}
+                    data={androidPermRows}
+                    rowKey="id"
+                    size="xs"
+                    showCheckbox={true}
+                    selectedRows={androidPermRows.filter((r) => Boolean(userPerms[r.perm]))}
+                    onRowSelect={(row, checked) =>
+                      setUserPerms((prev) => ({ ...prev, [row.perm]: checked }))
+                    }
+                    onSelectAll={(checked) =>
+                      setUserPerms((prev) => {
+                        const next = { ...prev };
+                        androidPermRows.forEach((r) => {
+                          next[r.perm] = checked;
+                        });
+                        return next;
+                      })
+                    }
+                    onRowClick={(row) => handleTogglePerm(row.perm)}
+                    showSearch={true}
+                    searchPlaceholder="Search Android permissions..."
+                    showPagination={true}
+                    itemsPerPage={fullscreenPanel === 'single-perms' ? 20 : 12}
+                    emptyMessage="No Android permissions available."
+                  />
+                )}
+              </WindowPanel>
+            </Grid>
+          </Grid>
+        );
+      })()}
+
       {/* EDIT USER DIALOG */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ bgcolor: '#0B132B', color: '#F8FAFC' }}>Edit User Account</DialogTitle>
@@ -1425,12 +1561,25 @@ export const AdminPage: React.FC = () => {
           {isMFAEnabled && (
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ color: '#38BDF8', fontWeight: 700, display: 'block', textAlign: 'center', mb: 0.5 }}>
-                Admin MFA Authorization Code (6 Digits)
+                {activeMFAMethod === 'email' ? 'Email Verification Code (6 Digits)' : 'Admin MFA Authorization Code (6 Digits)'}
               </Typography>
               <OtpBoxesInput
                 value={passwordOtp}
                 onChange={setPasswordOtp}
               />
+              {activeMFAMethod === 'email' && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => sendAdminMfaCode('update_password')}
+                    disabled={sendingActionOtp}
+                    sx={{ color: '#38BDF8', textTransform: 'none' }}
+                  >
+                    {sendingActionOtp ? 'Sending Code...' : 'Send Email Code'}
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>
@@ -1471,12 +1620,25 @@ export const AdminPage: React.FC = () => {
           {isMFAEnabled && (
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ color: '#38BDF8', fontWeight: 700, display: 'block', textAlign: 'center', mb: 0.5 }}>
-                Admin MFA Authorization Code (6 Digits)
+                {activeMFAMethod === 'email' ? 'Email Verification Code (6 Digits)' : 'Admin MFA Authorization Code (6 Digits)'}
               </Typography>
               <OtpBoxesInput
                 value={tempTokenOtp}
                 onChange={setTempTokenOtp}
               />
+              {activeMFAMethod === 'email' && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => sendAdminMfaCode('temp_token_maker')}
+                    disabled={sendingActionOtp}
+                    sx={{ color: '#38BDF8', textTransform: 'none' }}
+                  >
+                    {sendingActionOtp ? 'Sending Code...' : 'Send Email Code'}
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
 
@@ -1629,12 +1791,25 @@ export const AdminPage: React.FC = () => {
           {isMFAEnabled && (
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ color: '#EF4444', fontWeight: 700, display: 'block', textAlign: 'center', mb: 0.5 }}>
-                Safety Switch Authorization Code (6 Digits)
+                {activeMFAMethod === 'email' ? 'Email Verification Code (6 Digits)' : 'Safety Switch Authorization Code (6 Digits)'}
               </Typography>
               <OtpBoxesInput
                 value={autoKillOtp}
                 onChange={setAutoKillOtp}
               />
+              {activeMFAMethod === 'email' && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => sendAdminMfaCode('reset_auto_kill')}
+                    disabled={sendingActionOtp}
+                    sx={{ color: '#38BDF8', textTransform: 'none' }}
+                  >
+                    {sendingActionOtp ? 'Sending Code...' : 'Send Email Code'}
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>

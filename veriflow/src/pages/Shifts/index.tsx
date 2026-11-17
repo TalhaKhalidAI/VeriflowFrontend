@@ -92,6 +92,13 @@ export function ShiftsPage() {
 
   const canRestartAnyShift = isAdmin || Boolean(user?.permissions?.['shifts.restart.any']);
   const canRestartOwnShift = canRestartAnyShift || Boolean(user?.permissions?.['shifts.restart']);
+  const hasSqliteWipePerm =
+    isAdmin ||
+    Boolean(user?.permissions?.['android.data.delete_all']) ||
+    Boolean(user?.permissions?.['user.delete_all_data']);
+  const canClearShiftSqlite = (s: ShiftRecord) =>
+    String(s.status).toLowerCase() === 'active' &&
+    (isAdmin || (hasSqliteWipePerm && Number(s.user_id) === Number(user?.id)));
 
   const canRestartShiftRecord = (s?: ShiftRecord | null) =>
     Boolean(s && (canRestartAnyShift || (canRestartOwnShift && isShiftSelfCreated(s))));
@@ -700,15 +707,15 @@ export function ShiftsPage() {
       label: 'Clear SQLite',
       icon: <DeleteIcon sx={{ fontSize: 16 }} />,
       variant: 'warning',
-      disabled: (s: ShiftRecord) => !isAdmin || String(s.status).toLowerCase() !== 'active' || clearSqliteMutation.isPending,
+      disabled: (s: ShiftRecord) => !canClearShiftSqlite(s) || clearSqliteMutation.isPending,
       onClick: (s: ShiftRecord) => {
-        if (String(s.status).toLowerCase() !== 'active') return;
+        if (!canClearShiftSqlite(s)) return;
         if (window.confirm(`Queue remote SQLite wipe for ${s.user_name || `User #${s.user_id}`} (shift ${s.id.slice(0, 8)})?`)) {
           clearSqliteMutation.mutate(s.id);
         }
       },
       render: (s: ShiftRecord) => {
-        if (!isAdmin || String(s.status).toLowerCase() !== 'active') return null;
+        if (!canClearShiftSqlite(s)) return null;
         return (
           <Button
             size="small"
