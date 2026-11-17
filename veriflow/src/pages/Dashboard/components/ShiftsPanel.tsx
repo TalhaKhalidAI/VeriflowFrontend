@@ -32,6 +32,11 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
       Number(s.created_by) === currentUserId);
   const canViewOthers =
     isAdmin ||
+    Boolean(currentUser?.permissions?.['shifts.view.any']) ||
+    Boolean(currentUser?.permissions?.['shifts.stats.view.any']);
+  const canInspectShiftsPage =
+    isAdmin ||
+    Boolean(currentUser?.permissions?.['shifts.view']) ||
     Boolean(currentUser?.permissions?.['shifts.view.any']);
   const [viewTab, setViewTab] = useState<ViewTab>('tabular');
   const [filterMode, setFilterMode] = useState<FilterMode>('time');
@@ -658,12 +663,14 @@ export function ShiftsPanel({ shifts, users }: ShiftsPanelProps) {
                               🗑 Delete
                             </button>
                           )}
-                          <button
-                            onClick={() => navigate('/shifts')}
-                            className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
-                          >
-                            Inspect →
-                          </button>
+                          {canInspectShiftsPage && (
+                            <button
+                              onClick={() => navigate('/shifts')}
+                              className="btn btn-ghost btn-xs text-yellow-400 hover:bg-yellow-400/10 font-mono h-6 min-h-0 text-[10px] px-2"
+                            >
+                              Inspect →
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

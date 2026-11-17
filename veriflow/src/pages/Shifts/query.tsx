@@ -39,6 +39,17 @@ export const useShiftsQuery = (options?: { enabled?: boolean }) => {
   });
 };
 
+export const useDashboardShiftsStatsQuery = (options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['shifts', 'dashboard-stats'],
+    queryFn: async () => {
+      const data = await http.get<ShiftListResponse>('/shifts/dashboard-stats');
+      return data;
+    },
+    enabled: options?.enabled,
+  });
+};
+
 export const useStartShiftMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({

@@ -56,6 +56,7 @@ import {
   useSetPermissionsMutation,
   useRemovePermissionsMutation,
   useBulkSetPermissionsMutation,
+  useSetManagedUsersMutation,
 } from './query';
 import type { AdminUser } from './types';
 import { useAuthStore } from '../../store/authStore';
@@ -82,7 +83,6 @@ export const AdminPage: React.FC = () => {
   const canViewDirectory =
     isSelfAdminQuick ||
     Boolean(myPerms['admin.users.view']) ||
-    Boolean(myPerms['admin.users']) ||
     Boolean(myPerms['user.view.any']) ||
     Boolean(myPerms['admin.access']);
 
@@ -105,6 +105,7 @@ export const AdminPage: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState('user');
+  const [editManagedById, setEditManagedById] = useState<string>('');
 
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -132,6 +133,7 @@ export const AdminPage: React.FC = () => {
 
   const [permMatrixUser, setPermMatrixUser] = useState<AdminUser | null>(null);
   const [userPerms, setUserPerms] = useState<Record<string, boolean>>({});
+  const [managedUserIdsDraft, setManagedUserIdsDraft] = useState<number[]>([]);
 
   // Bulk Perm State
   const [bulkSelectedUserIds, setBulkSelectedUserIds] = useState<number[]>([]);
@@ -149,23 +151,35 @@ export const AdminPage: React.FC = () => {
   const setPermsMutation = useSetPermissionsMutation();
   const removePermsMutation = useRemovePermissionsMutation();
   const bulkPermsMutation = useBulkSetPermissionsMutation();
+  const setManagedUsersMutation = useSetManagedUsersMutation();
 
   // Handlers
-  const handleOpenEdit = (user: AdminUser) => {
-    setSelectedUser(user);
-    setEditName(user.name);
-    setEditEmail(user.email);
-    setEditRole(user.role || 'user');
+  const handleOpenEdit = (target: AdminUser) => {
+    setSelectedUser(target);
+    setEditName(target.name);
+    setEditEmail(target.email);
+    setEditRole(target.role || 'user');
+    setEditManagedById(target.managed_by_id != null ? String(target.managed_by_id) : '');
     setEditDialogOpen(true);
   };
 
   const isSelfAdmin = user?.role === 'admin' || (user as any)?.user_role === 'admin';
 
+  const canManageOtherUser = (target: AdminUser) => {
+    const isTargetMainAdmin = String(target.role || target.user_role || '').toLowerCase() === 'admin';
+    if (isSelfAdmin) {
+      return !isTargetMainAdmin;
+    }
+    if (isTargetMainAdmin) return false;
+    return target.managed_by_id != null && Number(target.managed_by_id) === Number(user?.id);
+  };
+
   const handleSaveEdit = async () => {
     if (!selectedUser) return;
     const payload: any = { name: editName, email: editEmail };
-    if (isSelfAdmin) {
-      payload.role = editRole;
+    if (isSelfAdmin && String(selectedUser.role || '').toLowerCase() !== 'admin') {
+      payload.user_role = editRole === 'admin' ? 'user' : editRole;
+      payload.managed_by_id = editManagedById ? Number(editManagedById) : null;
     }
     await updateMutation.mutateAsync({
       userId: selectedUser.id,
@@ -256,7 +270,7 @@ export const AdminPage: React.FC = () => {
   };
 
   const filterValidPerms = (permsObj?: Record<string, boolean> | null) => {
-    const validSet = new Set(allPermissions);
+    const validSet = new Set([...allPermissions, ...Object.keys(PERMISSION_METADATA)]);
     const cleaned: Record<string, boolean> = {};
     if (!permsObj) return cleaned;
     for (const [k, v] of Object.entries(permsObj)) {
@@ -267,9 +281,14 @@ export const AdminPage: React.FC = () => {
     return cleaned;
   };
 
-  const handleOpenPermMatrix = (user: AdminUser) => {
-    setPermMatrixUser(user);
-    setUserPerms(filterValidPerms(user.permissions));
+  const handleOpenPermMatrix = (targetUser: AdminUser) => {
+    setPermMatrixUser(targetUser);
+    setUserPerms(filterValidPerms(targetUser.permissions));
+    setManagedUserIdsDraft(
+      users
+        .filter((u) => Number(u.managed_by_id) === Number(targetUser.id))
+        .map((u) => u.id)
+    );
     setActiveTab(1);
   };
 
@@ -297,24 +316,47 @@ export const AdminPage: React.FC = () => {
 
   const handleClearUserPerms = async () => {
     if (!permMatrixUser) return;
+    if (isSelfAdmin) {
+      await removePermsMutation.mutateAsync({
+        user_id: permMatrixUser.id,
+        remove_all: true,
+      });
+      setUserPerms({});
+      return;
+    }
+    const allowedKeysToRevoke = allPermissionRows
+      .map((r) => r.perm)
+      .filter((p) => Boolean(userPerms[p]));
+    if (allowedKeysToRevoke.length === 0) return;
     await removePermsMutation.mutateAsync({
       user_id: permMatrixUser.id,
-      remove_all: true,
+      permission_keys: allowedKeysToRevoke,
     });
-    setUserPerms({});
+    setUserPerms((prev) => {
+      const next = { ...prev };
+      allowedKeysToRevoke.forEach((k) => {
+        next[k] = false;
+      });
+      return next;
+    });
   };
+
+  const effectiveAllPermissions = React.useMemo(
+    () => Array.from(new Set([...allPermissions, ...Object.keys(PERMISSION_METADATA)])),
+    [allPermissions]
+  );
 
   // Group permissions by category
   const permissionGroups = React.useMemo(() => {
     const groups: Record<string, string[]> = {};
-    allPermissions.filter((p) => Boolean(PERMISSION_METADATA[p])).forEach((p) => {
+    effectiveAllPermissions.filter((p) => Boolean(PERMISSION_METADATA[p])).forEach((p) => {
       const parts = p.split('.');
       const category = parts[0] ? parts[0].toUpperCase() : 'GENERAL';
       if (!groups[category]) groups[category] = [];
       groups[category].push(p);
     });
     return groups;
-  }, [allPermissions]);
+  }, [effectiveAllPermissions]);
 
   const [permCategoryFilter, setPermCategoryFilter] = useState<string>('ALL');
   const [bulkCategoryFilter, setBulkCategoryFilter] = useState<string>('ALL');
@@ -336,9 +378,20 @@ export const AdminPage: React.FC = () => {
     badge?: string;
   }
 
+  const rbacMetaPerms = new Set(['admin.users.promote', 'user.promote', 'admin.rbac.delegate', 'admin.rbac.android']);
+  const canDelegateRbacAuthority = isSelfAdmin || Boolean(myPerms['admin.rbac.delegate']);
+  const canDelegateAndroidPerms = isSelfAdmin || Boolean(myPerms['admin.rbac.android']);
+
   const allPermissionRows = React.useMemo<PermissionRow[]>(() => {
-    return allPermissions
+    return effectiveAllPermissions
       .filter((p) => Boolean(PERMISSION_METADATA[p]))
+      .filter((p) => {
+        if (isSelfAdmin) return true;
+        if (rbacMetaPerms.has(p) && !canDelegateRbacAuthority) return false;
+        if (p.startsWith('android.') && !canDelegateAndroidPerms) return false;
+        if (!p.startsWith('admin.')) return true;
+        return Boolean(myPerms[p]);
+      })
       .map((p) => {
         const meta = PERMISSION_METADATA[p];
         const category = p.split('.')[0]?.toUpperCase() || 'GENERAL';
@@ -351,12 +404,21 @@ export const AdminPage: React.FC = () => {
           badge: meta?.badge,
         };
       });
-  }, [allPermissions]);
+  }, [effectiveAllPermissions, isSelfAdmin, myPerms]);
 
-  const permCategories = React.useMemo(
-    () => ['ALL', ...Object.keys(permissionGroups)],
-    [permissionGroups]
-  );
+  const manageableRbacUsers = React.useMemo(() => {
+    return users.filter((u) => {
+      const isTargetMainAdmin = String(u.role || u.user_role || '').toLowerCase() === 'admin';
+      if (isTargetMainAdmin) return false;
+      if (isSelfAdmin) return true;
+      return Number(u.id) !== Number(user?.id) && Number(u.managed_by_id) === Number(user?.id);
+    });
+  }, [users, isSelfAdmin, user?.id]);
+
+  const permCategories = React.useMemo(() => {
+    const cats = Array.from(new Set(allPermissionRows.map((r) => r.category)));
+    return ['ALL', ...cats];
+  }, [allPermissionRows]);
 
   const filteredSinglePermRows = React.useMemo(
     () =>
@@ -612,14 +674,18 @@ export const AdminPage: React.FC = () => {
         hideOnMobile: true,
         render: (_, u) => {
           const permCount = Object.keys(u.permissions || {}).length;
-          return canManagePerms ? (
+          const canOpenRbac =
+            canManagePerms &&
+            String(u.role || u.user_role || '').toLowerCase() !== 'admin' &&
+            (isSelfAdmin || (Number(u.id) !== Number(user?.id) && canManageOtherUser(u)));
+          return canOpenRbac ? (
             <Button
               size="small"
               variant="text"
               onClick={() => handleOpenPermMatrix(u)}
               sx={{ textTransform: 'none', color: '#38BDF8', fontSize: 12, p: 0 }}
             >
-              {u.role === 'admin' ? 'Admin Full Access' : `${permCount} grants`}
+              {`${permCount} grants`}
             </Button>
           ) : (
             <Typography variant="caption" sx={{ color: '#94A3B8' }}>
@@ -635,47 +701,55 @@ export const AdminPage: React.FC = () => {
 
   const renderUserActions = (u: AdminUser) => {
     const isTargetSelf = Number(user?.id) === Number(u.id);
+    const isTargetMainAdmin = String(u.role || u.user_role || '').toLowerCase() === 'admin';
+    const canActOnOther = !isTargetSelf && canManageOtherUser(u);
     const myPerms = user?.permissions || {};
 
     const canEdit =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.users.promote']) ||
-      Boolean(myPerms['admin.settings.update']) ||
+      (isSelfAdmin && isTargetSelf) ||
+      (canActOnOther && (isSelfAdmin || Boolean(myPerms['admin.users.promote']))) ||
       (isTargetSelf && (Boolean(myPerms['user.update.self']) || Boolean(myPerms['user.update.profile']) || Boolean(myPerms['user.update.email'])));
 
     const canChangePass =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.anyuser.password.update']) ||
+      (isSelfAdmin && isTargetSelf) ||
+      (canActOnOther && (isSelfAdmin || Boolean(myPerms['admin.anyuser.password.update']))) ||
       (isTargetSelf && Boolean(myPerms['user.update.password']));
 
     const canIssueSLT =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.users.promote']) ||
-      Boolean(myPerms['admin.users.restore']) ||
-      Boolean(myPerms['admin.users.disable']);
+      canActOnOther &&
+      (isSelfAdmin ||
+        Boolean(myPerms['admin.users.promote']) ||
+        Boolean(myPerms['admin.users.restore']) ||
+        Boolean(myPerms['admin.users.disable']));
 
     const canEnable =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.user.enable']) ||
-      Boolean(myPerms['admin.users.promote']) ||
-      (isTargetSelf && Boolean(myPerms['user.self.enable']));
+      (canActOnOther &&
+        (isSelfAdmin ||
+          Boolean(myPerms['admin.user.enable']) ||
+          Boolean(myPerms['admin.users.promote']))) ||
+      (isTargetSelf && !isTargetMainAdmin && Boolean(myPerms['user.self.enable']));
 
     const canDisable =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.users.disable']) ||
-      Boolean(myPerms['admin.users.promote']) ||
-      (isTargetSelf && Boolean(myPerms['user.disable.self']));
+      !isTargetMainAdmin &&
+      ((canActOnOther &&
+        (isSelfAdmin ||
+          Boolean(myPerms['admin.users.disable']) ||
+          Boolean(myPerms['admin.users.promote']))) ||
+        (isTargetSelf && Boolean(myPerms['user.disable.self'])));
 
     const canRestore =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.users.restore']) ||
-      Boolean(myPerms['admin.users.promote']);
+      canActOnOther &&
+      (isSelfAdmin ||
+        Boolean(myPerms['admin.users.restore']) ||
+        Boolean(myPerms['admin.users.promote']));
 
     const canDelete =
-      isSelfAdmin ||
-      Boolean(myPerms['admin.users.delete']) ||
-      Boolean(myPerms['admin.users.promote']) ||
-      (isTargetSelf && Boolean(myPerms['user.delete.self']));
+      !isTargetMainAdmin &&
+      ((canActOnOther &&
+        (isSelfAdmin ||
+          Boolean(myPerms['admin.users.delete']) ||
+          Boolean(myPerms['admin.users.promote']))) ||
+        (isTargetSelf && Boolean(myPerms['user.delete.self'])));
 
     return (
       <Box sx={{ display: 'inline-flex', gap: 0.5, justifyContent: 'flex-end' }}>
@@ -944,11 +1018,11 @@ export const AdminPage: React.FC = () => {
             >
               <Table<AdminUser>
                 columns={pickerUserColumns}
-                data={users}
+                data={manageableRbacUsers}
                 rowKey="id"
                 size="xs"
                 isLoading={usersLoading}
-                emptyMessage="No user accounts found."
+                emptyMessage={isSelfAdmin ? "No non-admin user accounts found." : "No users assigned to you for RBAC delegation."}
                 showSearch={true}
                 searchPlaceholder="Search users..."
                 showPagination={true}
@@ -1004,7 +1078,84 @@ export const AdminPage: React.FC = () => {
                 </Alert>
               ) : (
                 <>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                  {isSelfAdmin && String(permMatrixUser.role || permMatrixUser.user_role || '').toLowerCase() !== 'admin' && (
+                    <Box
+                      sx={{
+                        mb: 2.5,
+                        p: 2,
+                        bgcolor: '#07111D',
+                        border: '1px solid #1E293B',
+                        borderRadius: 2,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: { xs: 'column', sm: 'row' },
+                          justifyContent: 'space-between',
+                          alignItems: { xs: 'flex-start', sm: 'center' },
+                          gap: 1,
+                          mb: 1.5,
+                        }}
+                      >
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ color: '#38BDF8', fontWeight: 700 }}>
+                            Managed Users Scope ({managedUserIdsDraft.length} assigned)
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                            Choose which operators <strong>{permMatrixUser.name}</strong> is allowed to manage (when granted RBAC/admin permissions).
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="info"
+                          disabled={setManagedUsersMutation.isPending}
+                          onClick={() =>
+                            setManagedUsersMutation.mutate({
+                              managerId: permMatrixUser.id,
+                              userIds: managedUserIdsDraft,
+                            })
+                          }
+                        >
+                          Save Managed Users
+                        </Button>
+                      </Box>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {users
+                          .filter(
+                            (u) =>
+                              u.id !== permMatrixUser.id &&
+                              String(u.role || u.user_role || '').toLowerCase() !== 'admin'
+                          )
+                          .map((op) => {
+                            const isAssigned = managedUserIdsDraft.includes(op.id);
+                            return (
+                              <Chip
+                                key={op.id}
+                                label={`${op.name || op.email} (#${op.id})`}
+                                size="small"
+                                onClick={() =>
+                                  setManagedUserIdsDraft((prev) =>
+                                    isAssigned ? prev.filter((id) => id !== op.id) : [...prev, op.id]
+                                  )
+                                }
+                                color={isAssigned ? 'info' : 'default'}
+                                variant={isAssigned ? 'filled' : 'outlined'}
+                                sx={{
+                                  fontWeight: 600,
+                                  fontSize: '0.74rem',
+                                  borderColor: isAssigned ? '#38BDF8' : '#334155',
+                                  color: isAssigned ? '#0F172A' : '#CBD5E1',
+                                }}
+                              />
+                            );
+                          })}
+                      </Box>
+                    </Box>
+                  )}
+
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, flexShrink: 0 }}>
                     {permCategories.map((cat) => (
                       <Chip
                         key={cat}
@@ -1047,6 +1198,8 @@ export const AdminPage: React.FC = () => {
                     searchPlaceholder="Search permissions by name, key, or description..."
                     showPagination={true}
                     itemsPerPage={fullscreenPanel === 'single-perms' ? 20 : 12}
+                    fillHeight={fullscreenPanel === 'single-perms'}
+                    maxHeight={fullscreenPanel === 'single-perms' ? undefined : 460}
                     emptyMessage="No permissions match this filter."
                   />
                 </>
@@ -1079,19 +1232,19 @@ export const AdminPage: React.FC = () => {
             >
               <Table<AdminUser>
                 columns={pickerUserColumns}
-                data={users}
+                data={manageableRbacUsers}
                 rowKey="id"
                 size="xs"
                 isLoading={usersLoading}
                 showCheckbox={true}
-                selectedRows={users.filter((u) => bulkSelectedUserIds.includes(u.id))}
+                selectedRows={manageableRbacUsers.filter((u) => bulkSelectedUserIds.includes(u.id))}
                 onRowSelect={(u, checked) =>
                   setBulkSelectedUserIds((prev) =>
                     checked ? (prev.includes(u.id) ? prev : [...prev, u.id]) : prev.filter((id) => id !== u.id)
                   )
                 }
                 onSelectAll={(checked) =>
-                  setBulkSelectedUserIds(checked ? users.map((u) => u.id) : [])
+                  setBulkSelectedUserIds(checked ? manageableRbacUsers.map((u) => u.id) : [])
                 }
                 onRowClick={(u) =>
                   setBulkSelectedUserIds((prev) =>
@@ -1102,7 +1255,7 @@ export const AdminPage: React.FC = () => {
                 searchPlaceholder="Search target users..."
                 showPagination={true}
                 itemsPerPage={8}
-                emptyMessage="No users available."
+                emptyMessage={isSelfAdmin ? "No non-admin users available." : "No users assigned to you for bulk delegation."}
               />
             </WindowPanel>
           </Grid>
@@ -1214,18 +1367,41 @@ export const AdminPage: React.FC = () => {
             fullWidth
             size="small"
           />
-          {isSelfAdmin && (
-            <TextField
-              select
-              label="Role"
-              value={editRole}
-              onChange={(e) => setEditRole(e.target.value)}
-              fullWidth
-              size="small"
-            >
-              <MenuItem value="user">User (Standard)</MenuItem>
-              <MenuItem value="admin">Administrator</MenuItem>
-            </TextField>
+          {isSelfAdmin && selectedUser && String(selectedUser.role || '').toLowerCase() !== 'admin' && (
+            <>
+              <TextField
+                select
+                label="Role"
+                value={editRole === 'admin' ? 'user' : editRole}
+                onChange={(e) => setEditRole(e.target.value)}
+                fullWidth
+                size="small"
+              >
+                <MenuItem value="user">User (Standard / Operator)</MenuItem>
+              </TextField>
+              <TextField
+                select
+                label="Assigned Manager (Delegated RBAC)"
+                value={editManagedById}
+                onChange={(e) => setEditManagedById(e.target.value)}
+                fullWidth
+                size="small"
+                helperText="Only the assigned manager (and Main Admin) can manage this user's RBAC & account"
+              >
+                <MenuItem value="">Main Admin Only (Unassigned)</MenuItem>
+                {users
+                  .filter(
+                    (u) =>
+                      u.id !== selectedUser.id &&
+                      String(u.role || u.user_role || '').toLowerCase() !== 'admin'
+                  )
+                  .map((mgr) => (
+                    <MenuItem key={mgr.id} value={String(mgr.id)}>
+                      {mgr.name} ({mgr.email}) — #{mgr.id}
+                    </MenuItem>
+                  ))}
+              </TextField>
+            </>
           )}
         </DialogContent>
         <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>

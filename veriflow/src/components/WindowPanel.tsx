@@ -47,7 +47,7 @@ export const WindowPanel: React.FC<WindowPanelProps> = ({
               p: { xs: 2, sm: 3 },
               display: 'flex',
               flexDirection: 'column',
-              overflowY: 'auto',
+              overflow: 'hidden',
               boxShadow: '0 24px 64px rgba(0, 0, 0, 0.85)',
             }
           : {
@@ -143,7 +143,19 @@ export const WindowPanel: React.FC<WindowPanelProps> = ({
       </Box>
 
       {/* Window Body */}
-      {!isMinimized && <Box sx={{ flex: 1, minHeight: 0 }}>{children}</Box>}
+      {!isMinimized && (
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: isFullscreen ? 'hidden' : 'visible',
+          }}
+        >
+          {children}
+        </Box>
+      )}
     </Card>
   );
 };

@@ -11,6 +11,7 @@ export interface AdminUser {
   permissions: Record<string, boolean>;
   mfa_enabled?: boolean;
   mfa_method?: string | null;
+  managed_by_id?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -32,6 +33,7 @@ export interface UpdateUserPayload {
   role?: string;
   user_role?: string;
   is_active?: boolean;
+  managed_by_id?: number | null;
 }
 
 export interface PasswordConfirmPayload {

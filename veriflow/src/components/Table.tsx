@@ -59,6 +59,8 @@ export interface TableProps<T = any> {
   rowClassName?: string;
   cellClassName?: string;
   renderExpandedRow?: (row: T) => React.ReactNode;
+  maxHeight?: string | number;
+  fillHeight?: boolean;
 }
 
 // ============================================================================
@@ -97,6 +99,8 @@ export const Table = <T extends Record<string, any>>({
   rowClassName = '',
   cellClassName = '',
   renderExpandedRow,
+  maxHeight,
+  fillHeight = false,
 }: TableProps<T>): JSX.Element => {
   // ─── State ──────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -440,6 +444,7 @@ export const Table = <T extends Record<string, any>>({
         width: '100%',
         maxWidth: '100%',
         minWidth: 0,
+        ...(fillHeight ? { flex: 1, minHeight: 0 } : {}),
       }}
       className={className}
     >
@@ -454,6 +459,7 @@ export const Table = <T extends Record<string, any>>({
             flexWrap: 'wrap',
             width: '100%',
             minWidth: 0,
+            flexShrink: 0,
           }}
         >
           <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0, width: '100%', maxWidth: 420 }}>
@@ -529,7 +535,10 @@ export const Table = <T extends Record<string, any>>({
           width: '100%',
           maxWidth: '100%',
           minWidth: 0,
+          maxHeight,
+          ...(fillHeight ? { flex: 1, minHeight: 0 } : {}),
           overflowX: 'auto',
+          overflowY: maxHeight || fillHeight ? 'auto' : undefined,
           WebkitOverflowScrolling: 'touch',
           borderRadius: 12,
           border: '1px solid #1E293B',
@@ -543,6 +552,9 @@ export const Table = <T extends Record<string, any>>({
             style={{
               backgroundColor: '#07111D',
               borderBottom: '1px solid #1E293B',
+              position: maxHeight || fillHeight ? 'sticky' : undefined,
+              top: maxHeight || fillHeight ? 0 : undefined,
+              zIndex: maxHeight || fillHeight ? 2 : undefined,
             }}
             className={headerClassName}
           >
@@ -856,7 +868,7 @@ export const Table = <T extends Record<string, any>>({
 
       {/* ─── Pagination ───────────────────────────────────────── */}
       {showPagination && totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingTop: 4, flexShrink: 0 }}>
           <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>
             Showing{' '}
             <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
