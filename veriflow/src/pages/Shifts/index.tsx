@@ -603,8 +603,8 @@ export function ShiftsPage() {
         const lockReason = isActive
           ? 'Shift is already active'
           : !canRestartOwnShift
-          ? "Requires 'shifts.restart' permission (Admin can grant this in Admin Console)"
-          : "Cannot restart: normal users can only restart shifts they created themselves (requires 'shifts.restart.any')";
+            ? "Requires 'shifts.restart' permission (Admin can grant this in Admin Console)"
+            : "Cannot restart: normal users can only restart shifts they created themselves (requires 'shifts.restart.any')";
         return (
           <Button
             size="small"
@@ -699,7 +699,7 @@ export function ShiftsPage() {
     {
       label: 'Clear SQLite',
       icon: <DeleteIcon sx={{ fontSize: 16 }} />,
-      color: 'warning',
+      variant: 'warning',
       disabled: (s: ShiftRecord) => !isAdmin || String(s.status).toLowerCase() !== 'active' || clearSqliteMutation.isPending,
       onClick: (s: ShiftRecord) => {
         if (String(s.status).toLowerCase() !== 'active') return;
@@ -957,7 +957,7 @@ export function ShiftsPage() {
             getValue:
               col.key === 'user_id'
                 ? (s: ShiftRecord) =>
-                    `${s.user_name || userMap.get(Number(s.user_id))?.name || s.user_email?.split('@')[0] || `User #${s.user_id}`} (#${s.user_id})`
+                  `${s.user_name || userMap.get(Number(s.user_id))?.name || s.user_email?.split('@')[0] || `User #${s.user_id}`} (#${s.user_id})`
                 : col.key === 'started_at'
                   ? (s: ShiftRecord) => (s.started_at ? new Date(s.started_at).toLocaleDateString() : 'N/A')
                   : undefined,
@@ -1845,11 +1845,10 @@ export function ShiftsPage() {
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#F8FAFC', fontWeight: 600 }}>
                     {selectedShiftInfo.created_by != null
-                      ? `${selectedShiftInfo.created_by_name || getUserLabel(selectedShiftInfo.created_by)}${
-                          Number(selectedShiftInfo.created_by) === Number(selectedShiftInfo.user_id)
-                            ? ' (Self-Started)'
-                            : ' (Admin / Supervisor Started)'
-                        }`
+                      ? `${selectedShiftInfo.created_by_name || getUserLabel(selectedShiftInfo.created_by)}${Number(selectedShiftInfo.created_by) === Number(selectedShiftInfo.user_id)
+                        ? ' (Self-Started)'
+                        : ' (Admin / Supervisor Started)'
+                      }`
                       : 'System / Unknown'}
                   </Typography>
                   {selectedShiftInfo.created_by_email && (

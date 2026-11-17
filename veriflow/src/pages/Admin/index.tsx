@@ -62,6 +62,7 @@ import type { AdminUser } from './types';
 import { useAuthStore } from '../../store/authStore';
 import { useMFAStatusQuery } from '../Security/query';
 import { ToastMsgs } from '../../api/toastUtils';
+import { http } from '../../api/http/https';
 import { OtpBoxesInput } from '../../components/OtpModal';
 import { Table, type TableColumn } from '../../components/Table';
 import { WindowPanel } from '../../components/WindowPanel';
@@ -78,12 +79,6 @@ export const AdminPage: React.FC = () => {
     user?.role?.toLowerCase() === 'admin' || user?.user_role?.toLowerCase() === 'admin';
   const canManagePerms =
     isSelfAdminQuick || Boolean(myPerms['admin.users.promote']) || Boolean(myPerms['user.promote']);
-  const canResetAutoKill = isSelfAdminQuick || Boolean(myPerms['admin.system.kill_switch']);
-  const canViewDirectory =
-    isSelfAdminQuick ||
-    Boolean(myPerms['admin.users.view']) ||
-    Boolean(myPerms['user.view.any']) ||
-    Boolean(myPerms['admin.access']);
 
   const [showDisabled, setShowDisabled] = useState(true);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -120,6 +115,15 @@ export const AdminPage: React.FC = () => {
 
   const [autoKillDialogOpen, setAutoKillDialogOpen] = useState(false);
   const [autoKillOtp, setAutoKillOtp] = useState('');
+
+  const [actionDialog, setActionDialog] = useState<{
+    open: boolean;
+    type: 'disable' | 'enable' | 'delete' | 'restore';
+    user: AdminUser | null;
+  }>({ open: false, type: 'disable', user: null });
+  const [actionPassword, setActionPassword] = useState('');
+  const [actionOtp, setActionOtp] = useState('');
+  const [sendingActionOtp, setSendingActionOtp] = useState(false);
 
   const [permMatrixUser, setPermMatrixUser] = useState<AdminUser | null>(null);
   const [userPerms, setUserPerms] = useState<Record<string, boolean>>({});
@@ -217,6 +221,50 @@ export const AdminPage: React.FC = () => {
     setIssuedTempToken(res.temp_token || res.token || 'TOKEN_ISSUED_IN_COOKIE');
   };
 
+  const handleOpenActionDialog = (type: 'disable' | 'enable' | 'delete' | 'restore', targetUser: AdminUser) => {
+    setActionPassword('');
+    setActionOtp('');
+    setActionDialog({ open: true, type, user: targetUser });
+  };
+
+  const handleSendActionOtp = async () => {
+    const purposeMap: Record<'disable' | 'enable' | 'delete' | 'restore', string> = {
+      disable: 'disable_account',
+      enable: 'enable_account',
+      restore: 'restore_account',
+      delete: 'mfa_stepup',
+    };
+    const purpose = purposeMap[actionDialog.type];
+    setSendingActionOtp(true);
+    try {
+      await http.post(`/mfa/send_genaric_otp?purpose=${encodeURIComponent(purpose)}`);
+      ToastMsgs.success('Verification code sent to your email.');
+    } catch (err: any) {
+      ToastMsgs.error(err?.response?.data?.detail || err?.message || 'Failed to send verification code');
+    } finally {
+      setSendingActionOtp(false);
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!actionDialog.user) return;
+    const targetId = actionDialog.user.id;
+    const payload = {
+      password: actionPassword || undefined,
+      otp: actionOtp || undefined,
+    };
+    if (actionDialog.type === 'disable') {
+      await disableMutation.mutateAsync({ userId: targetId, payload });
+    } else if (actionDialog.type === 'enable') {
+      await enableMutation.mutateAsync({ userId: targetId, payload });
+    } else if (actionDialog.type === 'delete') {
+      await deleteMutation.mutateAsync({ userId: targetId, payload });
+    } else if (actionDialog.type === 'restore') {
+      await restoreMutation.mutateAsync({ userId: targetId, otp: actionOtp || undefined });
+    }
+    setActionDialog((prev) => ({ ...prev, open: false }));
+  };
+
   const filterValidPerms = (permsObj?: Record<string, boolean> | null) => {
     const validSet = new Set([...allPermissions, ...Object.keys(PERMISSION_METADATA)]);
     const cleaned: Record<string, boolean> = {};
@@ -293,18 +341,6 @@ export const AdminPage: React.FC = () => {
     () => Array.from(new Set([...allPermissions, ...Object.keys(PERMISSION_METADATA)])),
     [allPermissions]
   );
-
-  // Group permissions by category
-  const permissionGroups = React.useMemo(() => {
-    const groups: Record<string, string[]> = {};
-    effectiveAllPermissions.filter((p) => Boolean(PERMISSION_METADATA[p])).forEach((p) => {
-      const parts = p.split('.');
-      const category = parts[0] ? parts[0].toUpperCase() : 'GENERAL';
-      if (!groups[category]) groups[category] = [];
-      groups[category].push(p);
-    });
-    return groups;
-  }, [effectiveAllPermissions]);
 
   const [permCategoryFilter, setPermCategoryFilter] = useState<string>('ALL');
   const [bulkCategoryFilter, setBulkCategoryFilter] = useState<string>('ALL');
@@ -727,7 +763,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Enable Account">
               <IconButton
                 size="small"
-                onClick={() => enableMutation.mutate({ userId: u.id })}
+                onClick={() => handleOpenActionDialog('enable', u)}
                 sx={{ color: '#10B981' }}
               >
                 <UserCheck fontSize="small" />
@@ -739,7 +775,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Disable Account">
               <IconButton
                 size="small"
-                onClick={() => disableMutation.mutate({ userId: u.id })}
+                onClick={() => handleOpenActionDialog('disable', u)}
                 sx={{ color: '#EF4444' }}
               >
                 <UserX fontSize="small" />
@@ -752,7 +788,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Restore Account">
               <IconButton
                 size="small"
-                onClick={() => restoreMutation.mutate({ userId: u.id })}
+                onClick={() => handleOpenActionDialog('restore', u)}
                 sx={{ color: '#10B981' }}
               >
                 <RotateCcw fontSize="small" />
@@ -764,7 +800,7 @@ export const AdminPage: React.FC = () => {
             <Tooltip title="Delete Account">
               <IconButton
                 size="small"
-                onClick={() => deleteMutation.mutate({ userId: u.id })}
+                onClick={() => handleOpenActionDialog('delete', u)}
                 sx={{ color: '#64748B', '&:hover': { color: '#EF4444' } }}
               >
                 <Trash2 fontSize="small" />
@@ -1616,6 +1652,102 @@ export const AdminPage: React.FC = () => {
             disabled={resetKillMutation.isPending}
           >
             Confirm Reset
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ACCOUNT ACTION CONFIRMATION DIALOG (DISABLE / ENABLE / DELETE / RESTORE) */}
+      <Dialog
+        open={actionDialog.open}
+        onClose={() => setActionDialog((prev) => ({ ...prev, open: false }))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: '#0B132B',
+            color: actionDialog.type === 'delete' || actionDialog.type === 'disable' ? '#EF4444' : '#10B981',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            pb: 1,
+          }}
+        >
+          <Typography variant="h6" fontWeight={700}>
+            {actionDialog.type === 'disable' && 'Disable User Account'}
+            {actionDialog.type === 'enable' && 'Enable User Account'}
+            {actionDialog.type === 'delete' && 'Delete User Account'}
+            {actionDialog.type === 'restore' && 'Restore User Account'}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setActionDialog((prev) => ({ ...prev, open: false }))}
+            sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444' } }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ bgcolor: '#0B132B', pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" sx={{ color: '#94A3B8', mt: 1 }}>
+            Confirm {actionDialog.type} for <strong>{actionDialog.user?.username || actionDialog.user?.email}</strong>.
+          </Typography>
+          {actionDialog.type !== 'restore' && (
+            <TextField
+              label={isSelfAdmin ? 'Your Password (Optional for Admin)' : 'Your Password'}
+              type="password"
+              value={actionPassword}
+              onChange={(e) => setActionPassword(e.target.value)}
+              fullWidth
+              size="small"
+            />
+          )}
+          {isMFAEnabled && (
+            <Box sx={{ mt: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: '#38BDF8', fontWeight: 700, display: 'block', textAlign: 'center', mb: 0.5 }}
+              >
+                {activeMFAMethod === 'email'
+                  ? 'Email Verification Code (6 Digits)'
+                  : '2FA Authenticator TOTP Code (6 Digits)'}
+              </Typography>
+              <OtpBoxesInput value={actionOtp} onChange={setActionOtp} />
+              {activeMFAMethod === 'email' && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={handleSendActionOtp}
+                    disabled={sendingActionOtp}
+                    sx={{ color: '#38BDF8', textTransform: 'none' }}
+                  >
+                    {sendingActionOtp ? 'Sending Code...' : 'Send Email Code'}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#0B132B', p: 2 }}>
+          <Button
+            onClick={() => setActionDialog((prev) => ({ ...prev, open: false }))}
+            sx={{ color: '#94A3B8' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color={actionDialog.type === 'delete' || actionDialog.type === 'disable' ? 'error' : 'success'}
+            onClick={handleConfirmAction}
+            disabled={
+              disableMutation.isPending ||
+              enableMutation.isPending ||
+              deleteMutation.isPending ||
+              restoreMutation.isPending ||
+              (isMFAEnabled && actionOtp.trim().length < 6)
+            }
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>
